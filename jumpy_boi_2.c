@@ -38,7 +38,7 @@ CAB202 project, Semester 2 2018
 
 #define PLAYER_WIDTH 9
 #define PLAYER_HEIGHT 9
-#define PLAYER_START_X (LCD_X/2-PLAYER_WIDTH/2)
+#define PLAYER_START_X 1
 #define PLAYER_START_Y 1
 #define JUMP_SPEED 0.15
 #define MOVE_SPEED 0.3
@@ -173,6 +173,7 @@ void update_player();
 // Blocks
 void setup_blocks();
 block_t *create_block(int curr_row, int curr_col, bool safe, int num_blocks);
+block_t *create_starting_block();
 bool generate_safe(int curr_col, int num_cols, int *safe_count);
 void update_blocks();
 
@@ -247,9 +248,10 @@ setup (void)
 void setup() {
 	set_clock_speed(CPU_8MHz);
 	lcd_init(LCD_DEFAULT_CONTRAST);
+	setup_usb_serial();
+	_delay_ms(1000);
 	setup_io();
 	setup_timers();
-	setup_usb_serial();
 	clear_screen();
 	show_screen();
 }
@@ -276,7 +278,7 @@ void process() {
 	update_blocks();
 	update_player();
 	update_treasure();
-	usb_serial_send("hello");
+	usb_serial_send("hello\n");
 	show_screen();
 }
 
@@ -376,13 +378,14 @@ setup_blocks (void)
 */
 void setup_blocks() {
 	// Row and column parameters
-	num_rows = floor(screen_height() / ROW_HEIGHT)-1;
+	num_rows = floor(screen_height() / ROW_HEIGHT);
 	num_cols = floor(screen_width() / COL_WIDTH);
 	// Populate block_array, stopping at max block count
-	num_blocks = 0;
+	create_starting_block();
+	num_blocks = 1;
 	while (num_blocks < MAX_BLOCKS) {
 		// Loop over all the rows
-		for (int curr_row = 0; curr_row < num_rows; curr_row++) {
+		for (int curr_row = 1; curr_row < num_rows; curr_row++) {
 			int safe_count = 0;
 			// Loop over columns
 			for (int curr_col = 0; curr_col < num_cols; curr_col++) {
@@ -402,13 +405,27 @@ void setup_blocks() {
 }
 
 /*
+create_starting_block
+	Creates the starting block in the first row
+*/
+block_t *create_starting_block() {
+	block_array[0].row = 0;
+	block_array[0].column = 0;
+	block_array[0].safe = true;
+	block_array[0].out_of_bounds = false;
+	block_array[0].sprite = sprite_create(0, ROW_HEIGHT-2,
+		                                BLOCK_WIDTH, BLOCK_HEIGHT, safe_sprite);
+	return &block_array[0];
+}
+
+/*
 create_block
 	Creates a block in block_array based on parameters
 */
 block_t *create_block(int curr_row, int curr_col, bool safe, int curr_block) {
 	// Calculate some parameters
 	int x = curr_col * COL_WIDTH;
-	int y = (curr_row+1) * ROW_HEIGHT - 1;
+	int y = (curr_row+1) * ROW_HEIGHT - 2;
 	uint8_t *sprite = safe ? safe_sprite : forbidden_sprite;
 	// Apply these parameters to the block in block_array
 	block_array[curr_block].row = curr_row;
