@@ -27,6 +27,7 @@ CAB202 project, Semester 2 2018
 #include <lcd_model.h>
 #include <macros.h>
 #include <usb_serial.h>
+#include <cab202_adc.h>
 
 // Parameters
 #define STUDENT_NAME "Jarod Lam"
@@ -37,7 +38,7 @@ CAB202 project, Semester 2 2018
 #define MIN_SCREEN_HEIGHT 50
 
 #define PLAYER_WIDTH 9
-#define PLAYER_HEIGHT 9
+#define PLAYER_HEIGHT 8
 #define PLAYER_START_X 1
 #define PLAYER_START_Y 1
 #define JUMP_SPEED 0.15
@@ -48,17 +49,17 @@ CAB202 project, Semester 2 2018
 #define ANIM_DURATION 20
 
 #define TREASURE_WIDTH 9
-#define TREASURE_HEIGHT 9
-#define TREASURE_SPEED 0.5
+#define TREASURE_HEIGHT 8
+#define TREASURE_SPEED 1
 
 #define BLOCK_HEIGHT 2
 #define BLOCK_WIDTH 10
 #define MAX_BLOCKS 30
 #define FORBIDDEN_CHANCE 0.3
 #define EMPTY_CHANCE 0.2
-#define ROW_SPEED 0.3
 #define ROW_HEIGHT 12
 #define COL_WIDTH 15
+#define ROW_SPEED_MULT 0.002
 
 /* ========================================================================== */
 /*  Global variables and types                                                */
@@ -67,6 +68,7 @@ CAB202 project, Semester 2 2018
 // Enums
 enum switches {SW2, SW3, SWU, SWL, SWD, SWR, SWC};
 enum leds {LED0, LED1};
+enum pots {POT0, POT1};
 
 // Types
 /*
@@ -91,7 +93,6 @@ typedef struct player_t {
 	int score;            // Current score
 	bool dead;            // Flag for if the player is dying/dead
 	int prev_block;       // Index of the previous block the player stepped on
-	int respawn;          // Flag for if the player is respawning
 	int curr_block;       // Index of block the player is on
 	int move_dir;         // Direction of movement for player from -1 to 1
 } player_t;
@@ -113,6 +114,7 @@ block_t block_array[MAX_BLOCKS];  // Block struct array
 int num_rows;
 int num_cols;
 int num_blocks;
+int block_speed;
 
 volatile uint8_t state_count[7] = {0,0,0,0,0,0,0};
 volatile bool switch_closed[7] = {0,0,0,0,0,0,0};
@@ -131,8 +133,7 @@ uint8_t forbidden_sprite[] = {
 	0b01010101, 0b01000000
 };
 uint8_t player_sprite[] = {
-	0b01100011, 0b00000000,
-	0b10010100, 0b10000000,
+	0b11110111, 0b10000000,
 	0b11011101, 0b10000000,
 	0b01000001, 0b00000000,
 	0b10100010, 0b10000000,
@@ -142,9 +143,8 @@ uint8_t player_sprite[] = {
 	0b00111110, 0b00000000 
 };
 uint8_t treasure_sprite[] = {
-	0b00000011, 0b10000000,
+	0b00000111, 0b10000000,
 	0b00001111, 0b10000000,
-	0b00010011, 0b10000000,
 	0b00010011, 0b10000000,
 	0b00100101, 0b00000000,
 	0b01010110, 0b00000000,
@@ -187,9 +187,10 @@ void update_blocks();
 // Treasure
 void setup_treasure();
 void update_treasure();
+void treasure_collect();
 
 // Collision
-bool block_level_collision(sprite_id s1, sprite_id s2);
+bool bounding_box_collision (sprite_id s1, sprite_id s2);
 //bool pixel_level_collision (sprite_id s1, sprite_id s2);
 //int get_coord_list(sprite_id s, int (*sx)[], int (*sy)[], int size);
 int check_block_collision(sprite_id s);
@@ -265,12 +266,11 @@ setup (void)
 void setup() {
 	set_clock_speed(CPU_8MHz);
 	lcd_init(LCD_DEFAULT_CONTRAST);
-	setup_usb_serial();
-	_delay_ms(1000);
+	adc_init();
 	setup_io();
 	setup_timers();
-	clear_screen();
-	show_screen();
+	setup_usb_serial();
+	_delay_ms(500);
 }
 
 void reset() {
@@ -351,9 +351,8 @@ setup_player (void)
 */
 void setup_player() {
 	// Defaults
-	player.prev_block = false;
+	player.prev_block = -1;
 	player.dead = false;
-	player.respawn = 3;
 	// Create the player sprite
 	player.sprite = sprite_create(PLAYER_START_X, PLAYER_START_Y,
 	                              PLAYER_WIDTH, PLAYER_HEIGHT, player_sprite);
@@ -372,7 +371,7 @@ void update_player() {
 	player_standing();
 	player_physics();
 	player_block_motion();
-	player_block_collision();
+	//player_block_collision();
 	player_control();
 	
 	sprite_draw(player.sprite);
@@ -400,6 +399,7 @@ player_standing
 void player_standing() {
 	// Get the current standing block index
 	player.curr_block = get_current_block(player.sprite);
+	usb_serial_sendf("Player current block %d\n", player.curr_block);
 	// If just landed on a block, set the player's move speed to 0
 	if (player.prev_block < 0 && player.curr_block >= 0) {
 		player.move_dir = 0;
@@ -430,7 +430,7 @@ void player_block_collision() {
 	if (player.curr_block >= 0) return;
 	// Check for a collided block
 	int b = check_block_collision(player.sprite);
-	usb_serial_sendf("Player ollided with block %d\n", b);
+	usb_serial_sendf("Player collided with block %d\n", b);
 	if (b < 0) return;  // Exit if no collision
 	else if (!block_array[b].safe) player_die();  // Die if block is forbidden
 	else if (sprite_y(player.sprite) == sprite_y(block_array[b].sprite)+1);
@@ -445,17 +445,17 @@ player_control
 	Controls the movement of the player through buttons
 */
 void player_control() {
-	// Exit the function if not standing on a block
-	if (player.curr_block < 0) return;
 	double dx = sprite_dx(player.sprite);
 	double dy = sprite_dy(player.sprite);
+	dx += player.move_dir * MOVE_SPEED;
+	sprite_turn_to(player.sprite, dx, dy);
+	// Exit the function if not standing on a block
+	if (player.curr_block < 0) return;
 	if (read_switch(SWL) && player.move_dir > -1) {
 		player.move_dir -= 1;
 	} else if (read_switch(SWR) && player.move_dir < 1) {
 		player.move_dir += 1;
 	}
-	dx += player.move_dir * MOVE_SPEED;
-	sprite_turn_to(player.sprite, dx, dy);
 }
 
 /*
@@ -494,8 +494,6 @@ void setup_blocks() {
 			                   : generate_safe(curr_col, num_cols, &safe_count);
 				block_t *created_block = create_block(curr_row, curr_col, 
 				                                      safe, num_blocks);
-				//sprite_turn_to(created_block->sprite, ROW_SPEED, 0);
-				created_block->sprite->dx = pow(-1,curr_row) * ROW_SPEED;
 				num_blocks++;
 			}
 		}
@@ -562,10 +560,14 @@ update_blocks
 	Draws all blocks and updates their positions
 */
 void update_blocks() {
-	for (int i = 0; i < num_blocks; i++) {
+	sprite_draw(block_array[0].sprite);
+	for (int i = 1; i < num_blocks; i++) {
 		sprite_id curr_sprite = block_array[i].sprite;
 		sprite_step(curr_sprite);
-		// Wrap around the screen and set out of bounds
+		// Set block speed according to potentiometer
+		curr_sprite->dx = pow(-1,block_array[i].row) 
+			                                  * adc_read(POT0) * ROW_SPEED_MULT;
+		// Wrap around the screen
 		int x = sprite_x(curr_sprite);
 		int y = sprite_y(curr_sprite);
 		if (x < -BLOCK_WIDTH) {
@@ -573,6 +575,7 @@ void update_blocks() {
 		} else if (x > screen_width()) {
 			sprite_move_to(curr_sprite, -BLOCK_WIDTH, y);
 		}
+		// Draw block
 		sprite_draw(curr_sprite);
 	}
 }
@@ -586,7 +589,7 @@ setup_treasure
 	Sets up treasure location and velocity
 */
 void setup_treasure() {
-	treasure.sprite = sprite_create(1, screen_height()-TREASURE_HEIGHT-2,
+	treasure.sprite = sprite_create(1, screen_height()-TREASURE_HEIGHT-3,
 		                      TREASURE_WIDTH, TREASURE_HEIGHT, treasure_sprite);
 	sprite_turn_to(treasure.sprite, TREASURE_SPEED, 0);
 	treasure.moving = true;
@@ -597,23 +600,34 @@ update_treasure
 	Draws and updates the treasure sprite
 */
 void update_treasure() {
-	if (treasure.sprite->is_visible) {return;}
+	if (!treasure.sprite->is_visible) {return;}
 	if (read_switch(SW3)) {    // Start and stop the treasure sprite
 		treasure.moving = !treasure.moving;
+		_delay_ms(10);
 	}
 	if (treasure.moving) {      // Move the treasure if enabled
 		sprite_step(treasure.sprite);
 		int x = sprite_x(treasure.sprite);
 		double dx = sprite_dx(treasure.sprite);
-		if (x <= 0 || x+TREASURE_WIDTH > screen_width()) {
+		if (x <= 0 || x+TREASURE_WIDTH >= screen_width()) {
 			dx = -dx;        // Bounce off the walls
 		}
 		sprite_turn_to(treasure.sprite, dx, sprite_dy(treasure.sprite));
 	}
-	/*if (bounding_box_collision(player.sprite, treasure.sprite) && !player.dead){
-		collect_treasure();  // Player collision
-	}*/
+	treasure_collect();
 	sprite_draw(treasure.sprite);
+}
+
+/*
+treasure_collect
+	Checks for treasure collision with the player
+*/
+void treasure_collect() {
+	if (bounding_box_collision(player.sprite, treasure.sprite)){
+		treasure.sprite->is_visible = false;
+		player.lives += 2;
+		setup_player();
+	}
 }
 
 /* ========================================================================== */
