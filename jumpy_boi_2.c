@@ -41,8 +41,9 @@ CAB202 project, Semester 2 2018
 #define PLAYER_START_X 1
 #define PLAYER_START_Y 1
 #define JUMP_SPEED 0.15
-#define MOVE_SPEED 0.3
-#define ACCEL_GRAV 0.005
+#define MOVE_SPEED 1
+#define ACCEL_GRAV 0.2
+#define TERMINAL_VEL 1
 #define INITIAL_LIVES 10
 #define ANIM_DURATION 20
 
@@ -91,7 +92,8 @@ typedef struct player_t {
 	bool dead;            // Flag for if the player is dying/dead
 	int prev_block;       // Index of the previous block the player stepped on
 	int respawn;          // Flag for if the player is respawning
-	int on_block;         // Index of block the player is on
+	int curr_block;       // Index of block the player is on
+	int move_dir;         // Direction of movement for player from -1 to 1
 } player_t;
 
 /*
@@ -111,7 +113,6 @@ block_t block_array[MAX_BLOCKS];  // Block struct array
 int num_rows;
 int num_cols;
 int num_blocks;
-int debug;
 
 volatile uint8_t state_count[7] = {0,0,0,0,0,0,0};
 volatile bool switch_closed[7] = {0,0,0,0,0,0,0};
@@ -169,6 +170,10 @@ void pause_screen();
 // Player
 void setup_player();
 void update_player();
+void player_physics();
+void player_standing();
+void player_block_motion();
+void player_control();
 
 // Blocks
 void setup_blocks();
@@ -182,8 +187,9 @@ void setup_treasure();
 void update_treasure();
 
 // Collision
-bool pixel_level_collision (sprite_id s1, sprite_id s2);
-int get_coord_list(sprite_id s, int (*sx)[], int (*sy)[], int size);
+bool block_level_collision (sprite_id s1, sprite_id s2);
+//bool pixel_level_collision (sprite_id s1, sprite_id s2);
+//int get_coord_list(sprite_id s, int (*sx)[], int (*sy)[], int size);
 int get_current_block(sprite_id s);
 
 // Timers and interrupts
@@ -198,6 +204,7 @@ void set_led(int led_id, bool state);
 // Serial
 void setup_usb_serial(void);
 void usb_serial_send(char * message);
+void usb_serial_sendf(const char *format, ...);
 void update_usb_serial();
 
 // Helper functions
@@ -285,7 +292,10 @@ void process() {
 	update_blocks();
 	update_player();
 	update_treasure();
-	usb_serial_send("hello\n");
+	//usb_serial_sendf("x: %d, y: %d, dx: %d, dy: %d\n",
+	//	sprite_x(player.sprite), sprite_y(player.sprite),
+	//	sprite_dx(player.sprite), sprite_dy(player.sprite));
+	usb_serial_sendf("%d\n", player.curr_block);
 	show_screen();
 }
 
@@ -314,7 +324,6 @@ pause_screen
 	Pause screen when the joystick centre is pressed once
 */
 void pause_screen() {
-	debug = sizeof(*player.sprite->bitmap);
 	if (!read_switch(SWC)) {return;}
 	uint32_t pause_overflow = overflow_counter; // Record pause time
 	char time_string[10];
@@ -325,7 +334,6 @@ void pause_screen() {
 	draw_formatted_centre(-8, "Lives: %d", player.lives);
 	draw_formatted_centre(0, "Score: %d", player.score);
 	draw_string_centre(8, time_string);
-	draw_formatted_centre(16, "%d", debug);
 	show_screen();
 	
 	_delay_ms(500);
@@ -359,16 +367,13 @@ update_player
 void update_player() {
 	sprite_step(player.sprite);
 	
-	// Block collision
-	//block_t *collided_block = check_block_collision(&player.sprite);
-	//block_t *bottom_block = get_bottom_block();
+	player.sprite->dx = 0;
 
 	// Player control
-	//player_physics(collided_block, bottom_block);
-	//player_mechanics(collided_block, bottom_block);
-	//player_control(keyCode, bottom_block != 0);
-	//player_boundaries();
-	//if (player.dead) {sprite_set_image(player.sprite, player_dead);}
+	player_standing();
+	player_physics();
+	player_block_motion();
+	player_control();
 	
 	sprite_draw(player.sprite);
 }
@@ -378,7 +383,59 @@ player_physics
 	Controls the physics of the player
 */
 void player_physics() {
-	
+	double dx = sprite_dx(player.sprite);
+	double dy = sprite_dy(player.sprite);
+	if (player.curr_block >= 0) {
+		dy = 0;
+	} else {
+		dy += ACCEL_GRAV;
+	}
+	sprite_turn_to(player.sprite, dx, dy);
+}
+
+/*
+player_standing
+	Handles the player standing on blocks
+*/
+void player_standing() {
+	// Get the current standing block index
+	player.curr_block = get_current_block(player.sprite);
+	// If just landed on a block, set the player's move speed to 0
+	if (player.prev_block < 0 && player.curr_block >= 0) {
+		player.move_dir = 0;
+	}
+	// Update the previous block with the current block
+	player.prev_block = player.curr_block;
+}
+
+/*
+player_block_motion
+	Handles the player motion due to standing on blocks
+*/
+void player_block_motion() {
+	// Exit the function if not on a block
+	if (player.curr_block < 0) return;
+	// Set dx to the motion of the block
+	double dx = sprite_dx(player.sprite);
+	double dy = sprite_dy(player.sprite);
+	dx = sprite_dx(block_array[player.curr_block].sprite);
+	sprite_turn_to(player.sprite, dx, dy);
+}
+
+/*
+player_control
+	Controls the movement of the player through buttons
+*/
+void player_control() {
+	double dx = sprite_dx(player.sprite);
+	double dy = sprite_dy(player.sprite);
+	if (read_switch(SWL) && player.move_dir > -1) {
+		player.move_dir -= 1;
+	} else if (read_switch(SWR) && player.move_dir < 1) {
+		player.move_dir += 1;
+	}
+	dx += player.move_dir * MOVE_SPEED;
+	sprite_turn_to(player.sprite, dx, dy);
 }
 
 /* ========================================================================== */
@@ -544,6 +601,32 @@ void update_treasure() {
 /* ========================================================================== */
 
 /*
+bounding_box_collision
+	Checks whether two sprites s1 and s2 collide at bounding box level
+Parameters:
+	sprite_id s1    First sprite to be compared
+	sprite_id s2    Second sprite to be compared
+Returns:
+	bool          True if there is a collision
+*/
+bool bounding_box_collision (sprite_id s1, sprite_id s2) {
+	// Get some parameters
+	int s1w = s1->width; int s1h = s1->height;
+	int s2w = s2->width; int s2h = s2->height;
+	int s1l = s1->x; int s1t = s1->y;
+	int s2l = s2->x; int s2t = s2->y;
+	int s1b = s1t+s1h; int s1r = s1l+s1w;
+	int s2b = s2t+s2h; int s2r = s2l+s2w;
+	
+	// Check for collision
+	if (s1r > s2l && s1l < s2r && s1b > s2t && s1t < s2b) {
+		return 1;
+	} else {
+		return 0;    // No collision
+	}
+}
+
+/*
 pixel_level_collsion
 	Checks whether two sprites s1 and s2 collide at pixel level
 Parameters:
@@ -552,7 +635,7 @@ Parameters:
 Returns:
 	bool          True if there is a collision
 */
-bool pixel_level_collision (sprite_id s1, sprite_id s2 )
+/*bool pixel_level_collision (sprite_id s1, sprite_id s2 )
 {
     // Generate x and y arrays
 	int s1size = sprite_width(s1) * sprite_height(s1);
@@ -570,13 +653,13 @@ bool pixel_level_collision (sprite_id s1, sprite_id s2 )
 		}
 	}
 	return false;
-}
+}*/
 
 /*
 get_coord_list
 	Supporting function for pixel_level_collision
 */
-int get_coord_list(sprite_id s, int size, int (*sx)[size], int (*sy)[size]) {
+/*int get_coord_list(sprite_id s, int size, int (*sx)[size], int (*sy)[size]) {
 	int ctr = 0;
 	int width_bits = 8 * ceil(sprite_width(s) / 8);
 	for (int y = 0; y < sprite_height(s); y++) {
@@ -593,7 +676,7 @@ int get_coord_list(sprite_id s, int size, int (*sx)[size], int (*sy)[size]) {
 		}
 	}
 	return ctr;
-}
+}*/
 
 /*
 get_current_block()
@@ -610,7 +693,7 @@ int get_current_block(sprite_id s) {
 		int bl = round(sprite_x(b));
 		int br = bl + sprite_width(b) - 1;
 		int bt = round(sprite_y(b));
-		if (sr >= bl && sl <= br && sb == bt-1) {
+		if (sr >= bl && sl <= br && sb == bt) {
 			return i;
 		}
 	}
@@ -772,6 +855,20 @@ void usb_serial_send(char * message) {
 	usb_serial_write((uint8_t *) message, strlen(message));
 }
 
+/*
+usb_serial_sendf
+	Sends formatted string over serial
+Parameters:
+	const char *format...    vsprintf arguments
+*/
+void usb_serial_sendf(const char *format, ...) {
+	va_list args;
+	va_start(args, format);
+	char string[100];
+	vsprintf(string, format, args);
+	usb_serial_write((uint8_t *) string, strlen(string));
+}
+
 /* ========================================================================== */
 /*  Helper functions                                                          */
 /* ========================================================================== */
@@ -793,12 +890,13 @@ void draw_string_centre(int y_offset, char *string) {
 draw_formatted_centre
 	Draws string in the centre of the screen formatted using snprintf
 Parameters:
-	int y_offset    The height at which to draw the string
+	int y_offset            The height at which to draw the string
+	const char *format...    vsprintf arguments
 */
 void draw_formatted_centre(int y_offset, const char * format, ...) {
 	va_list args;
 	va_start(args, format);
-	char string[1000];
+	char string[100];
 	vsprintf(string, format, args);
 	draw_string_centre(y_offset, string);
 }
@@ -852,6 +950,9 @@ sprite_turn_to
 	Sets player dx and dy, ported from ZDK
 */
 void sprite_turn_to(sprite_id sprite, double dx, double dy) {
+	if (dy > TERMINAL_VEL) {
+		dy = TERMINAL_VEL; // Stop the sprite from moving too fast
+	}
 	sprite->dx = dx;
 	sprite->dy = dy;
 }
