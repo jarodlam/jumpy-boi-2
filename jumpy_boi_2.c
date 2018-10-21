@@ -12,6 +12,7 @@ CAB202 project, Semester 2 2018
 // Includes
 #include <avr/io.h>
 #include <avr/interrupt.h>
+#include <avr/pgmspace.h>
 #include <util/delay.h>
 #include <cpu_speed.h>
 #include <stdio.h>
@@ -29,7 +30,7 @@ CAB202 project, Semester 2 2018
 #include <usb_serial.h>
 #include <cab202_adc.h>
 
-// Parameters
+// Defines
 #define STUDENT_NAME "Jarod Lam"
 #define STUDENT_NUMBER "n9625607"
 #define GAME_NAME "Jumpy Boi 2"
@@ -43,8 +44,8 @@ CAB202 project, Semester 2 2018
 #define PLAYER_START_Y 1
 #define JUMP_SPEED 0.15
 #define MOVE_SPEED 1
-#define ACCEL_GRAV 0.2
-#define TERMINAL_VEL 1
+#define ACCEL_GRAV 0.1
+#define TERMINAL_VEL 2
 #define INITIAL_LIVES 10
 #define ANIM_DURATION 20
 
@@ -61,7 +62,11 @@ CAB202 project, Semester 2 2018
 #define COL_WIDTH 15
 #define ROW_SPEED_MULT 0.002
 
+#define BIT(x) (1 << (x))
 #define DB_MASK 0b00000111
+#define OVERFLOW_TOP 1023
+#define ADC_MAX 1023
+#define DAC_MAX 1023
 
 /* ========================================================================== */
 /*  Global variables and types                                                */
@@ -214,8 +219,13 @@ void update_usb_serial();
 void usb_serial_send(char * message);
 void usb_serial_sendf(const char *format, ...);
 
+// Backlight
+void setup_backlight();
+void set_backlight(int duty_cycle);
+
 // Helper functions
-void draw_string_centre(int y_offset, char *string);
+void draw_string_centre(int y_offset, const char *string);
+void draw_string_centre_P(int y_offset, const char *string);
 void draw_formatted_centre(int y_offset, const char * format, ...);
 int screen_width();
 int screen_height();
@@ -272,6 +282,7 @@ void setup() {
 	adc_init();
 	setup_io();
 	setup_timers();
+	setup_backlight();
 	setup_usb_serial();
 	_delay_ms(500);
 }
@@ -315,10 +326,10 @@ intro_screen
 */
 void intro_screen() {
 	clear_screen();
-	draw_string_centre(-16, GAME_NAME);
-	draw_string_centre(-8, STUDENT_NAME);
-	draw_string_centre(0, STUDENT_NUMBER);
-	draw_string_centre(8, "SW2 TO START");
+	draw_string_centre_P(-16, PSTR(GAME_NAME));
+	draw_string_centre_P(-8, PSTR(STUDENT_NAME));
+	draw_string_centre_P(0, PSTR(STUDENT_NUMBER));
+	draw_string_centre_P(8, PSTR("SW2 TO START"));
 	show_screen();
 	while (!(read_switch(SW2) || usb_serial_getchar() == 's'));
 	srand(TCNT3);  // Use the timer to seed the RNG
@@ -335,7 +346,7 @@ void pause_screen() {
 	get_printable_time(time_string);
 	
 	clear_screen();
-	draw_string_centre(-16, "PAUSED");
+	draw_string_centre_P(-16, PSTR("PAUSED"));
 	draw_formatted_centre(-8, "Lives: %d", player.lives);
 	draw_formatted_centre(0, "Score: %d", player.score);
 	draw_string_centre(8, time_string);
@@ -436,7 +447,7 @@ void player_block_collision() {
 	if (player.curr_block >= 0) return;
 	// Check for a collided block
 	int b = check_block_collision(player.sprite);
-	usb_serial_sendf("Player collided with block %d\n", b);
+	usb_serial_sendf(PSTR("Player collided with block %d\n"), b);
 	if (b < 0) return;  // Exit if no collision
 	else if (!block_array[b].safe) player_die();  // Die if block is forbidden
 	else if (sprite_y(player.sprite) == sprite_y(block_array[b].sprite)+1);
@@ -469,7 +480,23 @@ player_die
 	Animates the player dying and then resets the player position
 */
 void player_die() {
-	
+	LCD_CMD(lcd_set_function, lcd_instr_extended);
+	// Fade out
+	int backlight_step = DAC_MAX+1 / 16;
+	int contrast_step = LCD_DEFAULT_CONTRAST+1 / 16;
+	for (int i = 15; i >= 0; i--) {
+		set_backlight(i * backlight_step);
+		LCD_CMD(lcd_set_contrast, i * contrast_step);
+		_delay_ms(50);
+	}
+	setup_player();
+	// Fade in
+	for (int i = 1; i <= 16; i++) {
+		set_backlight(i * backlight_step);
+		LCD_CMD(lcd_set_contrast, i * contrast_step);
+		_delay_ms(50);
+	}
+	LCD_CMD(lcd_set_function, lcd_instr_basic);
 }
 
 /* ========================================================================== */
@@ -550,9 +577,12 @@ Returns:
 */
 bool generate_safe(int curr_col, int num_cols, int *safe_count) {
 	// Force the block to be safe if there are none in the row
-	bool safe = true;
-	if (curr_col == num_cols-1 && safe_count <= 0) {
+	bool safe;
+	if (curr_col == num_cols-1 && *safe_count <= 0) {
 		safe = true;
+	// Force the block to be forbidden if there are none in the row
+	} else if (curr_col == num_cols-1 && *safe_count >= num_cols-1) {
+		safe = false;
 	} else {
 		// Randomly make this block forbidden
 		safe = ((double) rand() / (RAND_MAX) > FORBIDDEN_CHANCE);
@@ -867,9 +897,9 @@ set_switch
 */
 void set_switch(int switch_id) {
 	if (switch_id > 6 || switch_id < 0) {
-		return false;
+		return;
 	} else {
-		state_count[switch_id] = BIT_MASK;
+		state_count[switch_id] = DB_MASK;
 		switch_closed[switch_id] = true;
 	}
 }
@@ -931,6 +961,7 @@ void update_usb_serial() {
 		case 't': set_switch(SW3);
 		case 's': set_switch(SWD);
 		case 'p': set_switch(SWC);
+		case 'q': player_die();
 	}
 }
 
@@ -957,6 +988,40 @@ void usb_serial_sendf(const char *format, ...) {
 }
 
 /* ========================================================================== */
+/*  Backlight                                                                 */
+/* ========================================================================== */
+
+/*
+setup_pwm
+	Initialise PWM for LCD backlight, adapted from Topic 11 example code
+*/
+void setup_backlight() {
+	// Set to OVERFLOW_TOP ticks per overflow
+	TC4H = OVERFLOW_TOP >> 8;
+	OCR4C = OVERFLOW_TOP & 0xff;
+	// Use OC4A for PWM
+	TCCR4A = BIT(COM4A1) | BIT(PWM4A);
+	SET_BIT(DDRC, 7);
+	// Set pre-scale to "no pre-scale" 
+	TCCR4B = BIT(CS42) | BIT(CS41) | BIT(CS40);
+	// Select fast PWM
+	TCCR4D = 0;
+	// Turn on the backlight
+	set_backlight(DAC_MAX);
+}
+
+/*
+set_backlight
+	Set PWM for LCD backlight, adapted from Topic 11 example code
+*/
+void set_backlight(int duty_cycle) {
+	// Set bits 8 and 9 of Output Compare Register 4A.
+	TC4H = duty_cycle >> 8;
+	// Set bits 0..7 of Output Compare Register 4A.
+	OCR4A = duty_cycle & 0xff;
+}
+
+/* ========================================================================== */
 /*  Helper functions                                                          */
 /* ========================================================================== */
 
@@ -966,11 +1031,23 @@ draw_string_centre
 Parameters:
 	int y_offset    The height at which to draw the string
 */
-void draw_string_centre(int y_offset, char *string) {
+void draw_string_centre(int y_offset, const char *string) {
 	int length = strlen(string) * CHAR_WIDTH;
 	int x = screen_width()/2 - length / 2;
 	int y = screen_height()/2 + y_offset;
-	draw_string(x, y, string, FG_COLOUR);
+	draw_string(x, y, (char *) string, FG_COLOUR);
+}
+
+/*
+draw_string_centre_P
+	PROGMEM version of draw_string_centre
+Parameters:
+	int y_offset    The height at which to draw the string
+*/
+void draw_string_centre_P(int y_offset, const char *string) {
+	char buffer[100];
+	strcpy_P(buffer, string);
+	draw_string_centre(y_offset, buffer);
 }
 
 /*
