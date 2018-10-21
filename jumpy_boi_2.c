@@ -61,6 +61,8 @@ CAB202 project, Semester 2 2018
 #define COL_WIDTH 15
 #define ROW_SPEED_MULT 0.002
 
+#define DB_MASK 0b00000111
+
 /* ========================================================================== */
 /*  Global variables and types                                                */
 /* ========================================================================== */
@@ -203,13 +205,14 @@ void setup_timers();
 void setup_io();
 bool read_switch_raw(int switch_id);
 bool read_switch(int switch_id);
+void set_switch(int switch_id);
 void set_led(int led_id, bool state);
 
 // Serial
 void setup_usb_serial(void);
+void update_usb_serial();
 void usb_serial_send(char * message);
 void usb_serial_sendf(const char *format, ...);
-void update_usb_serial();
 
 // Helper functions
 void draw_string_centre(int y_offset, char *string);
@@ -282,6 +285,8 @@ void reset() {
 	setup_treasure();
 	clear_screen();
 	show_screen();
+	usb_serial_sendf("Game started. player x=%0.1f, player y=%0.1f\n",
+		sprite_x(player.sprite), sprite_y(player.sprite));
 }
 
 /*
@@ -292,6 +297,7 @@ process (void)
 void process() {
 	clear_screen();
 	pause_screen();
+	update_usb_serial();
 	update_blocks();
 	update_player();
 	update_treasure();
@@ -314,7 +320,7 @@ void intro_screen() {
 	draw_string_centre(0, STUDENT_NUMBER);
 	draw_string_centre(8, "SW2 TO START");
 	show_screen();
-	while (!read_switch(SW2));
+	while (!(read_switch(SW2) || usb_serial_getchar() == 's'));
 	srand(TCNT3);  // Use the timer to seed the RNG
 }
 
@@ -399,7 +405,7 @@ player_standing
 void player_standing() {
 	// Get the current standing block index
 	player.curr_block = get_current_block(player.sprite);
-	usb_serial_sendf("Player current block %d\n", player.curr_block);
+	//usb_serial_sendf("Player current block %d\n", player.curr_block);
 	// If just landed on a block, set the player's move speed to 0
 	if (player.prev_block < 0 && player.curr_block >= 0) {
 		player.move_dir = 0;
@@ -627,6 +633,11 @@ void treasure_collect() {
 		treasure.sprite->is_visible = false;
 		player.lives += 2;
 		setup_player();
+		char time_string[10];
+		get_printable_time(time_string);
+		usb_serial_sendf("Player collided with treasure. score=%d, lives=%d, \
+game time=%s, player x=%0.1f, player y=%0.1f\n", player.score, player.lives,
+			time_string, sprite_x(player.sprite), sprite_y(player.sprite));
 	}
 }
 
@@ -778,8 +789,8 @@ Timer 0
 */
 ISR(TIMER0_OVF_vect) {
 	for (int i = 0; i <= 6; i++) {
-		state_count[i] = ((state_count[i]<<1)&0b00000111) | read_switch_raw(i);
-		if (state_count[i] == 0b00000111) {
+		state_count[i] = ((state_count[i]<<1) & DB_MASK) | read_switch_raw(i);
+		if (state_count[i] & DB_MASK == DB_MASK) {
 			switch_closed[i] = true;
 		} else if (state_count[i] == 0b00000000){
 			switch_closed[i] = false;
@@ -851,6 +862,19 @@ bool read_switch(int switch_id) {
 }
 
 /*
+set_switch
+	Artificially sets the value of a switch
+*/
+void set_switch(int switch_id) {
+	if (switch_id > 6 || switch_id < 0) {
+		return false;
+	} else {
+		state_count[switch_id] = BIT_MASK;
+		switch_closed[switch_id] = true;
+	}
+}
+
+/*
 set_led
 	Set an LED to on or off
 Parameters:
@@ -895,8 +919,20 @@ void setup_usb_serial(void) {
 
 /*
 update_usb_serial
-	Checks for USB serial data and does things with it
+	Checks for serial input and maps characters to buttons
 */
+void update_usb_serial() {
+	int16_t char_code = usb_serial_getchar();
+	if (char_code <= 0) return;
+	switch (char_code) {
+		case 'a': set_switch(SWL);
+		case 'd': set_switch(SWR);
+		case 'w': set_switch(SWU);
+		case 't': set_switch(SW3);
+		case 's': set_switch(SWD);
+		case 'p': set_switch(SWC);
+	}
+}
 
 /*
 usb_serial_send
