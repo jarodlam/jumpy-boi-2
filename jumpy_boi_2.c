@@ -89,9 +89,9 @@ typedef struct player_t {
 	int lives;            // Current number of lives
 	int score;            // Current score
 	bool dead;            // Flag for if the player is dying/dead
-	block_t *prev_block;  // The previous block the player stepped on
-	int anim_timer;       // Counter for player left/right animations
+	int prev_block;       // Index of the previous block the player stepped on
 	int respawn;          // Flag for if the player is respawning
+	int on_block;         // Index of block the player is on
 } player_t;
 
 /*
@@ -181,6 +181,11 @@ void update_blocks();
 void setup_treasure();
 void update_treasure();
 
+// Collision
+bool pixel_level_collision (sprite_id s1, sprite_id s2);
+int get_coord_list(sprite_id s, int (*sx)[], int (*sy)[], int size);
+int get_current_block(sprite_id s);
+
 // Timers and interrupts
 void setup_timers();
 
@@ -209,6 +214,8 @@ double sprite_x(sprite_id sprite);
 double sprite_y(sprite_id sprite);
 double sprite_dx(sprite_id sprite);
 double sprite_dy(sprite_id sprite);
+double sprite_width(sprite_id sprite);
+double sprite_height(sprite_id sprite);
 sprite_id sprite_create(double x,double y,int width,int height,uint8_t image[]);
 
 /* ========================================================================== */
@@ -340,7 +347,6 @@ void setup_player() {
 	player.prev_block = false;
 	player.dead = false;
 	player.respawn = 3;
-	player.anim_timer = 0;
 	// Create the player sprite
 	player.sprite = sprite_create(PLAYER_START_X, PLAYER_START_Y,
 	                              PLAYER_WIDTH, PLAYER_HEIGHT, player_sprite);
@@ -365,6 +371,14 @@ void update_player() {
 	//if (player.dead) {sprite_set_image(player.sprite, player_dead);}
 	
 	sprite_draw(player.sprite);
+}
+
+/*
+player_physics
+	Controls the physics of the player
+*/
+void player_physics() {
+	
 }
 
 /* ========================================================================== */
@@ -523,6 +537,84 @@ void update_treasure() {
 		collect_treasure();  // Player collision
 	}*/
 	sprite_draw(treasure.sprite);
+}
+
+/* ========================================================================== */
+/*  Collision                                                                 */
+/* ========================================================================== */
+
+/*
+pixel_level_collsion
+	Checks whether two sprites s1 and s2 collide at pixel level
+Parameters:
+	sprite_id s1    First sprite to be compared
+	sprite_id s2    Second sprite to be compared
+Returns:
+	bool          True if there is a collision
+*/
+bool pixel_level_collision (sprite_id s1, sprite_id s2 )
+{
+    // Generate x and y arrays
+	int s1size = sprite_width(s1) * sprite_height(s1);
+    int s2size = sprite_width(s2) * sprite_height(s2);
+	int s1x[s1size], s1y[s1size], s2x[s2size], s2y[s2size];
+	// Populate the arrays
+	int ctr1 = get_coord_list(s1, &s1x, &s1y, s1size);
+	int ctr2 = get_coord_list(s2, &s2x, &s2y, s2size);
+	// Compare the two
+	for (int i = 0; i < ctr1; i++) {
+		for (int j = 0; j < ctr2; j++) {
+			if (s1x[i] == s2x[j] && s1y[i] == s2y[j]) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+/*
+get_coord_list
+	Supporting function for pixel_level_collision
+*/
+int get_coord_list(sprite_id s, int size, int (*sx)[size], int (*sy)[size]) {
+	int ctr = 0;
+	int width_bits = 8 * ceil(sprite_width(s) / 8);
+	for (int y = 0; y < sprite_height(s); y++) {
+		for (int x = 0; x < sprite_width(s); x++) {
+			// Find the bit and byte index for the current x and y pos
+			int pixel_byte = (y * width_bits + x) / 8;
+			int pixel_bit  = (y * width_bits + x) % 8;
+			// Check if they match, and add to the arrays if they do
+			if (BIT_IS_SET(s->bitmap[pixel_byte], pixel_bit)) {
+				*sx[ctr] = round(x + sprite_x(s));
+				*sy[ctr] = round(y + sprite_y(s));
+				ctr++;
+			}
+		}
+	}
+	return ctr;
+}
+
+/*
+get_current_block()
+	Gets the index of the block the sprite is standing on
+Returns:
+	int    Index of current block, or -1 if falling
+*/
+int get_current_block(sprite_id s) {
+	int sl = round(sprite_x(s));
+	int sr = sl + sprite_width(s) - 1;
+	int sb = round(sprite_y(s)) + sprite_height(s);
+	for (int i = 0; i <= num_blocks; i++) {
+		sprite_id b = block_array[i].sprite;
+		int bl = round(sprite_x(b));
+		int br = bl + sprite_width(b) - 1;
+		int bt = round(sprite_y(b));
+		if (sr >= bl && sl <= br && sb == bt-1) {
+			return i;
+		}
+	}
+	return -1;
 }
 
 /* ========================================================================== */
@@ -812,6 +904,21 @@ sprite_dy
 */
 double sprite_dy(sprite_id sprite) {
 	return sprite->dy;
+}
+
+/*
+sprite_width
+	Returns width of sprite, ported from ZDK
+*/
+double sprite_width(sprite_id sprite) {
+	return sprite->width;
+}
+/*
+sprite_width
+	Returns height of sprite, ported from ZDK
+*/
+double sprite_height(sprite_id sprite) {
+	return sprite->height;
 }
 
 /*
