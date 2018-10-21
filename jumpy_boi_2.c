@@ -173,7 +173,9 @@ void update_player();
 void player_physics();
 void player_standing();
 void player_block_motion();
+void player_block_collision();
 void player_control();
+void player_die();
 
 // Blocks
 void setup_blocks();
@@ -187,9 +189,10 @@ void setup_treasure();
 void update_treasure();
 
 // Collision
-bool block_level_collision (sprite_id s1, sprite_id s2);
+bool block_level_collision(sprite_id s1, sprite_id s2);
 //bool pixel_level_collision (sprite_id s1, sprite_id s2);
 //int get_coord_list(sprite_id s, int (*sx)[], int (*sy)[], int size);
+int check_block_collision(sprite_id s);
 int get_current_block(sprite_id s);
 
 // Timers and interrupts
@@ -292,10 +295,6 @@ void process() {
 	update_blocks();
 	update_player();
 	update_treasure();
-	//usb_serial_sendf("x: %d, y: %d, dx: %d, dy: %d\n",
-	//	sprite_x(player.sprite), sprite_y(player.sprite),
-	//	sprite_dx(player.sprite), sprite_dy(player.sprite));
-	usb_serial_sendf("%d\n", player.curr_block);
 	show_screen();
 }
 
@@ -373,6 +372,7 @@ void update_player() {
 	player_standing();
 	player_physics();
 	player_block_motion();
+	player_block_collision();
 	player_control();
 	
 	sprite_draw(player.sprite);
@@ -423,10 +423,30 @@ void player_block_motion() {
 }
 
 /*
+	Handles the player colliding with a block
+*/
+void player_block_collision() {
+	// Exit the function if standing on a block
+	if (player.curr_block >= 0) return;
+	// Check for a collided block
+	int b = check_block_collision(player.sprite);
+	usb_serial_sendf("Player ollided with block %d\n", b);
+	if (b < 0) return;  // Exit if no collision
+	else if (!block_array[b].safe) player_die();  // Die if block is forbidden
+	else if (sprite_y(player.sprite) == sprite_y(block_array[b].sprite)+1);
+	else {  // Set the horizontal motion to 0
+		player.sprite->x -= player.sprite->dx;
+		player.move_dir = 0;
+	}
+}
+
+/*
 player_control
 	Controls the movement of the player through buttons
 */
 void player_control() {
+	// Exit the function if not standing on a block
+	if (player.curr_block < 0) return;
 	double dx = sprite_dx(player.sprite);
 	double dy = sprite_dy(player.sprite);
 	if (read_switch(SWL) && player.move_dir > -1) {
@@ -436,6 +456,14 @@ void player_control() {
 	}
 	dx += player.move_dir * MOVE_SPEED;
 	sprite_turn_to(player.sprite, dx, dy);
+}
+
+/*
+player_die
+	Animates the player dying and then resets the player position
+*/
+void player_die() {
+	
 }
 
 /* ========================================================================== */
@@ -483,7 +511,6 @@ block_t *create_starting_block() {
 	block_array[0].row = 0;
 	block_array[0].column = 0;
 	block_array[0].safe = true;
-	block_array[0].out_of_bounds = false;
 	block_array[0].sprite = sprite_create(0, ROW_HEIGHT-2,
 		                                BLOCK_WIDTH, BLOCK_HEIGHT, safe_sprite);
 	return &block_array[0];
@@ -502,7 +529,6 @@ block_t *create_block(int curr_row, int curr_col, bool safe, int curr_block) {
 	block_array[curr_block].row = curr_row;
 	block_array[curr_block].column = curr_col;
 	block_array[curr_block].safe = safe;
-	block_array[curr_block].out_of_bounds = false;
 	block_array[curr_block].sprite = sprite_create(x, y,
 		                                     BLOCK_WIDTH, BLOCK_HEIGHT, sprite);
 	return &block_array[curr_block];
@@ -544,15 +570,9 @@ void update_blocks() {
 		int y = sprite_y(curr_sprite);
 		if (x < -BLOCK_WIDTH) {
 			sprite_move_to(curr_sprite, screen_width(), y);
-			block_array[i].out_of_bounds = false;
 		} else if (x > screen_width()) {
 			sprite_move_to(curr_sprite, -BLOCK_WIDTH, y);
-			block_array[i].out_of_bounds = false;
-		} /*else if (x < 0 || x+sprite_x(curr_sprite) > screen_width()) {
-			block_array[i].out_of_bounds = true;
-		} else {
-			block_array[i].out_of_bounds = false;
-		}*/
+		}
 		sprite_draw(curr_sprite);
 	}
 }
@@ -679,7 +699,7 @@ get_coord_list
 }*/
 
 /*
-get_current_block()
+get_current_block
 	Gets the index of the block the sprite is standing on
 Returns:
 	int    Index of current block, or -1 if falling
@@ -698,6 +718,23 @@ int get_current_block(sprite_id s) {
 		}
 	}
 	return -1;
+}
+
+/*
+check_block_collision
+	Checks collision of the sprite with every block on screen
+Returns:
+	int    Index of collided block, or -1 if none
+*/
+int check_block_collision(sprite_id s) {
+	int collided_ind = -1;
+	for (int i = 0; i <= num_blocks; i++) {
+		if (bounding_box_collision(s, block_array[i].sprite)) {
+			if (!block_array[i].safe) return i; // Prioritise forbidden
+			collided_ind = i;
+		}
+	}
+	return collided_ind;
 }
 
 /* ========================================================================== */
