@@ -1,0 +1,30 @@
+\contentsline {section}{\numberline {1}Assignment implementation summary}{2}
+\contentsline {section}{\numberline {2}Basic functionality test plan}{3}
+\contentsline {subsection}{\numberline {2.1}Intro}{3}
+\contentsline {subsection}{\numberline {2.2}Pause game}{3}
+\contentsline {subsection}{\numberline {2.3}Player size}{3}
+\contentsline {subsection}{\numberline {2.4}Block size}{4}
+\contentsline {subsection}{\numberline {2.5}Random blocks}{4}
+\contentsline {subsection}{\numberline {2.6}Player movement}{4}
+\contentsline {subsection}{\numberline {2.7}Treasure}{5}
+\contentsline {subsection}{\numberline {2.8}Basic game mechanics}{6}
+\contentsline {section}{\numberline {3}Advanced functionality test plan}{7}
+\contentsline {subsection}{\numberline {3.1}Block movement}{7}
+\contentsline {subsection}{\numberline {3.2}Player velocity}{8}
+\contentsline {subsection}{\numberline {3.3}Player jumping}{9}
+\contentsline {subsection}{\numberline {3.4}Player inventory}{9}
+\contentsline {subsection}{\numberline {3.5}Zombies}{9}
+\contentsline {subsection}{\numberline {3.6}Pause screen advanced}{9}
+\contentsline {section}{\numberline {4}Specialised Teensy functionality test plan}{10}
+\contentsline {subsection}{\numberline {4.1}ADC for block speed}{10}
+\contentsline {subsection}{\numberline {4.2}LED warning}{10}
+\contentsline {subsection}{\numberline {4.3}Multiple timers}{10}
+\contentsline {subsection}{\numberline {4.4}PWM controlled visual effects}{10}
+\contentsline {subsection}{\numberline {4.5}Pixel level collision}{10}
+\contentsline {subsection}{\numberline {4.6}Serial communication events}{10}
+\contentsline {subsection}{\numberline {4.7}Serial communication game control}{10}
+\contentsline {section}{\numberline {5}Specialised Teensy functionality justification}{11}
+\contentsline {subsection}{\numberline {5.1}Switch debouncing}{11}
+\contentsline {subsection}{\numberline {5.2}Direct control of LCD write}{11}
+\contentsline {subsection}{\numberline {5.3}Timers}{11}
+\contentsline {subsection}{\numberline {5.4}Program memory}{11}

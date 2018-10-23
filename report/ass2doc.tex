@@ -1,0 +1,220 @@
+\documentclass[10pt, titlepage]{article}
+
+\usepackage[margin=1in, a4paper]{geometry}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{longtable}
+
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{C}[1]{>{\centering\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\let\newline\\\arraybackslash\hspace{0pt}}m{#1}}
+
+\newenvironment{testplan}[1]
+% before
+{
+\newcommand{\test}[4]{\midrule ##1 & ##2 & ##3 & ##4 \\}
+\subsection{#1}
+\begin{table}[H]
+\vspace{-0.5cm}
+\caption{#1 test plan}
+\vspace{0.3cm}
+\begin{tabular}{L{0.3\textwidth}L{0.2\textwidth}L{0.25\textwidth}L{0.15\textwidth}}
+\toprule
+\textbf{Test of specific functionality} & \textbf{Test setup and actions} & \textbf{Expected result} & \textbf{Actual result} \\
+}
+% after
+{
+\bottomrule
+\end{tabular}
+\end{table}
+}
+
+\title{CAB202 Assignment 2 Documentation}
+\author{Jarod Lam \\ n9625607}
+\date{October 2018}
+
+\begin{document}
+\maketitle
+\clearpage
+\tableofcontents
+\clearpage
+
+\section{Assignment implementation summary}
+\begin{table}[h]
+\vspace{-0.5cm}
+\caption{Assignment implementation summary}
+\vspace{0.3cm}
+\begin{tabular}{L{0.2\textwidth}|L{0.4\textwidth}|L{0.3\textwidth}}
+\toprule
+\textbf{Item number} & \textbf{Item description} & \textbf{Implementation level} \\ \midrule
+1 & Intro & Fully implemented \\ \midrule
+2 & Pause game & Fully implemented \\ \midrule
+3 & Player size & Fully implemented \\ \midrule
+4 & Block size & Fully implemented \\ \midrule
+5 & Random blocks & Fully implemented \\ \midrule
+6 & Player movement & Fully implemented \\ \midrule
+7 & Treasure & Fully implemented \\ \midrule
+8 & Basic game mechanics & Partially implemented \\ \midrule
+9 & Block movement & Fully implemented \\ \midrule
+10 & Player velocity & Partially implemented \\ \midrule
+11 & Player jumping & Not implemented \\ \midrule
+12 & Player inventory & Not implemented \\ \midrule
+13 & Zombies & Not implemented \\ \midrule
+14 & Pause screen advanced & Not implemented \\ \midrule
+15 & ADC for block speed & Fully implemented \\ \midrule
+16 & Switch debouncing & Fully implemented \\ \midrule
+17 & LED warning & Not implemented \\ \midrule
+18 & Direct control of LCD & Not implemented \\ \midrule
+19 & Multiple timers & Partially implemented \\ \midrule
+20 & Program (flash) memory & Partially implemented \\ \midrule
+21 & PWM controlled visual effects & Partially implemented \\ \midrule
+22 & Pixel level collision & Not implemented \\ \midrule
+23 & Serial communication events & Partially implemented \\ \midrule
+24 & Serial communication game control & Partially implemented \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+
+\section{Basic functionality test plan}
+
+\begin{testplan}{Intro}
+\test{Program displays student name and number initially.}{Load the program and check that name and student number are displaying as expected.}{Student name and student number are displayed.}{As expected.}
+\test{Pressing SW2 starts the game.}{After loading game, press SW2.}{Intro screen clears and game screen is drawn.}{As expected.}
+\end{testplan}
+
+\begin{testplan}{Pause game}
+\test{When joystick centre is pressed once, the game pauses.}{Press the joystick centre while the game is running.}{All sprites stop moving and are unable to move by using the normal controls, the game screen is cleared, and information is displayed.}{As expected.}
+\test{Game information is displayed on the pause screen.}{Press the joystick centre to view the pause screen.}{Lives remaining, current score, and game time in mm:ss format are displayed.}{As expected.}
+\test{The game is resumed when joystick centre is pressed again.}{Press the joystick centre while on the pause screen.}{Pause screen disappears and game reappears on screen.}{As expected.}
+\end{testplan}
+
+\begin{testplan}{Player size}
+\test{The player initially appears on a `starting block' in the top row.}{Start the game.}{The player begins on a stationary safe starting block in the top row.}{As expected.}
+\test{The player’s sprite is at least 3 pixels high and 3 pixels wide.}{Run the game and observe the player sprite.}{The player's sprite is 8 pixels high and 9 pixels wide.}{As expected.}
+\end{testplan}
+
+\begin{testplan}{Block size}
+\test{All blocks are at least 2 pixels high.}{Start the game and observe the block sprites.}{All blocks are 2 pixels high.}{As expected.}
+\test{All blocks are at least 10 pixels wide.}{Start the game and observe the block sprites.}{All blocks are 10 pixels wide.}{As expected.}
+\test{Blocks are clearly distinguished from each other.}{Start the game and observe the block sprites.}{All blocks have visible horizontal spacing between each other.}{As expected.}
+\test{All blocks are always at least \texttt{player sprite height + 2} pixels vertically separated from other blocks.}{Start the game and observe the block sprites.}{All blocks are 10 pixels vertically separated from other blocks.}{As expected.}
+\test{There are at least 7 safe blocks on the screen at one time.}{Start the game and observe the block sprites.}{There are at least 7 safe blocks on the screen}{As expected.}
+\test{There are at least 2 forbidden blocks on the screen at one time.}{Start the game and observe the block sprites.}{There are at least 2 safe blocks on the screen.}{As expected.}
+\end{testplan}
+
+\begin{testplan}{Random blocks}
+\test{Blocks have no consistent observable pattern.}{Start the game and observe the blocks.}{Each block appears in a randomly selected row and column.}{As expected.}
+\test{Blocks do not overlap other blocks.}{Start the game and observe the blocks.}{All blocks stay within their respective rows and columns.}{As expected.}
+\end{testplan}
+
+\subsection{Player movement}
+This functionality has been redefined under advanced functionality. See ``\textit{Player velocity}''.
+
+\begin{testplan}{Treasure}
+\test{The treasure sprite is no larger than the player's sprite.}{Start the game and observe the treasure sprite.}{The treasure sprite is 8 pixels high and 8 pixels wide.}{As expected.}
+\test{The treasure sprite does not overlap any of the blocks.}{Start the game and observe the treasure sprite movement.}{The treasure sprite never overlaps a block.}{As expected.}
+\test{The treasure sprite spawns in the bottom half of the screen.}{Start the game and observe the treasure sprite.}{The treasure sprite spawns above the bottom row of blocks.}{As expected.}
+\test{The treasure sprite moves back and forward, changing horizontal direction when it reaches the edges of the screen.}{Start the game and observe the treasure sprite movement.}{The treasure sprite moves back and forward horizontally and `bounces' off the edges of the screen.}{As expected.}
+\test{The treasure sprite stops moving when SW3 is pressed and starts moving again if SW3 is pressed again.}{Press SW3 while the treasure sprite is visible, then press it again.}{The treasure sprite will stop moving, then start moving again.}{As expected.}
+\test{The treasure sprite disappears when the player collides with it and gives the player 2 more lives and returns the player to the `starting block'.}{Guide the player to the treasure sprite and collide with it. Press joystick centre to check lives.}{The treasure sprite disappears, the player gains 2 more lives, and is returned to the `starting block'.}{As expected.}
+\end{testplan}
+
+\begin{testplan}{Basic game mechanics}
+\test{The player starts with 10 lives.}{Start the game and press joystick centre to view the player's lives on the pause screen.}{The player has 10 lives.}{As expected.}
+\test{A point is scored every time the player lands on a safe block.}{Move the player around onto multiple safe blocks, then press joystick centre to check the score.}{The player's score goes up when landing on a safe block.}{Not implemented.}
+\test{The player dies if any part of the player sprite moves off the screen in any direction or manner.}{Guide the player off the sides or bottom of the screen.}{The player dies when it hits the edges of the screen.}{As expected.}
+\test{On death, the player respawns on the `starting block'}{Kill the player using any method imaginable while having 2 lives or more.}{The player dies and respawns on the stationary `starting block'.}{As expected.}
+\test{When the player loses all their lives, the game over screen is displayed which displays a game over message, total score, and game play time.}{Kill the player repeatedly until all lives are gone.}{The game over screen is displayed showing a message, total score, and game play time in mm:ss format.}{Not implemented.}
+\test{The game over screen allows the player to restart by pressing SW3 and score, lives, time, and player position all reset.}{Press SW3 on the game over screen.}{The game screen disappears and score, lives, time, and player position all reset.}{Not implemented.}
+\test{The game over screen allows the player to end the game by pressing SW2 which clears everything and just displays student number on the screen.}{Press SW2 on the game over screen.}{The screen is cleared and the student number is displayed on the screen.}{Not implemented.}
+\end{testplan}
+
+\clearpage
+\section{Advanced functionality test plan}
+
+\begin{testplan}{Block movement}
+\test{All blocks move at a constant horizontal speed.}{Start the game and observe block movement.}{Blocks move at the same constant speed and do not accelerate by themselves, except for the starting block.}{As expected.}
+\test{Each row of blocks must move in the opposite direction to the row above it.}{Start the game and observe block movement.}{Adjacent rows move in opposite directions, except for the starting block.}{As expected.}
+\end{testplan}
+
+\begin{testplan}{Player velocity}
+\test{Pressing the joystick left or right while the player is supported by a block sets the player in continuous horizontal motion at a constant speed relative to the block in the appropriate direction.}{Move the player onto a moving safe block and press joystick left and right.}{The player will move left when the left and right when the left and right joysticks are pressed, respectively, at a speed relative to the block.}{As expected.}
+\test{When in horizontal motion, the player's horizontal velocity must be greater than that of the block.}{Move the player onto a moving safe block and press the joystick against the direction of motion.}{The player makes progress against the direction of the block.}{As expected.}
+\test{If the player is moving horizontally on a supporting block and the joystick is pressed in the opposite direction, the player stops moving relative to the supporting block.}{Move the player onto a moving safe block, then press joystick left and then right.}{The player begins moving left relative to the block, then stops moving relative to the block and is carried by its motion alone.}{As expected.}
+\test{If the player is moving horizontally on a supporting block, and the joystick is pressed in the same direction as current movement, then the player continues to move at the same speed in the current direction.}{When the player is stationary, press joystick left or right, then press the joystick the same direction again.}{The player moves in the direction of the joystick and does not speed up or slow down.}{As expected.}
+\test{If the player is moving horizontally on a supporting block and the joystick is not pressed, then the player continues to move at the same speed in the current direction.}{When the player is stationary, press and release either joystick left or right.}{The player continues moving in the direction the joystick is pressed after it is released.}{As expected.}
+\test{If the player is not supported by a block, then it will commence to accelerate downwards.}{Guide the player off a safe block until it is not supported by any block.}{The player will start to accelerate downwards.}{As expected.}
+\test{If the player is moving horizontally before leaving the support of a block, then the player must continue to move horizontally at the same speed while accelerating downwards, so that a parabolic flight path will be observed.}{Move the player off a moving safe block.}{The player will keep its horizontal velocity but accelerate downwards according to gravity.}{As expected.}
+\test{If the player is moving without support of a block and the player lands on a safe block, it will then immediately begin to move horizontally in the same speed and direction as the block, and all vertical motion will cease.}{Move the player off a moving safe block so that it falls and lands on another moving safe block.}{When the player lands, it will immediately begin to move horizontally in the same speed and direction as the block, and all vertical motion will cease.}{As expected.}
+\test{If the player is moving without support of a block, and its Sprite collides with the end of a safe block (from the side), then its horizontal motion becomes zero, and it continues to accelerate downward.}{Make the player jump off a block and collide with the end of another safe block from the side.}{The player's horizontal motion becomes zero and it continues to accelerate downward.}{As expected.}
+\test{All other collisions between the player and safe blocks are treated in a manner consistent with the combined motion.}{From a lower row of blocks, make the player jump into a safe block on the row above.}{The player is given an upward velocity passes upward through the block above, keeping the horizontal velocity of its previous block and accelerating vertically downwards.}{Not implemented.}
+\test{Any collision with an unsafe block results in death.}{Guide the player into an unsafe block by standing or jumping into it.}{The player dies and a life is deducted.}{Not implemented.}
+\end{testplan}
+
+\begin{testplan}{Player jumping}
+\test{Pressing the joystick up while the player is supported by a block causes the player to jump.}{Press the joystick up while the player is supported by a block.}{The player is given an upward velocity.}{Not implemented.}
+\test{After UP is pressed, the player should commence to move upwards. Any horizontal motion should continue, and the acceleration provision when the player is not supported by a block will take effect.}{Press joystick up while on a safe block with horizontal motion.}{The player will retain the previous horizontal motion of the block while being given a new upwards velocity.}{Not implemented.}
+\end{testplan}
+
+\begin{testplan}{Player inventory}
+
+\end{testplan}
+
+\begin{testplan}{Zombies}
+
+\end{testplan}
+
+\begin{testplan}{Pause screen advanced}
+
+\end{testplan}
+
+\clearpage
+\section{Specialised Teensy functionality test plan}
+
+\begin{testplan}{ADC for block speed}
+
+\end{testplan}
+
+\begin{testplan}{LED warning}
+
+\end{testplan}
+
+\begin{testplan}{Multiple timers}
+
+\end{testplan}
+
+\begin{testplan}{PWM controlled visual effects}
+
+\end{testplan}
+
+\begin{testplan}{Pixel level collision}
+
+\end{testplan}
+
+\begin{testplan}{Serial communication events}
+
+\end{testplan}
+
+\begin{testplan}{Serial communication game control}
+
+\end{testplan}
+
+\clearpage
+\section{Specialised Teensy functionality justification}
+
+\subsection{Switch debouncing}
+
+
+\subsection{Direct control of LCD write}
+
+
+\subsection{Timers}
+
+
+\subsection{Program memory}
+
+
+\end{document}
