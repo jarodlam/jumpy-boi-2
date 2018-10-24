@@ -15,19 +15,15 @@
 {
 \newcommand{\test}[4]{\midrule ##1 & ##2 & ##3 & ##4 \\}
 \subsection{#1}
-\begin{table}[H]
-\vspace{-0.5cm}
-\caption{#1 test plan}
-\vspace{0.3cm}
-\begin{tabular}{L{0.3\textwidth}L{0.2\textwidth}L{0.25\textwidth}L{0.15\textwidth}}
+\begin{longtable}{L{0.3\textwidth}L{0.2\textwidth}L{0.25\textwidth}L{0.15\textwidth}}
+%\caption{#1 test plan}
 \toprule
 \textbf{Test of specific functionality} & \textbf{Test setup and actions} & \textbf{Expected result} & \textbf{Actual result} \\
 }
 % after
 {
 \bottomrule
-\end{tabular}
-\end{table}
+\end{longtable}
 }
 
 \title{CAB202 Assignment 2 Documentation}
@@ -37,6 +33,7 @@
 \begin{document}
 \maketitle
 \clearpage
+
 \tableofcontents
 \clearpage
 
@@ -111,7 +108,7 @@
 \end{testplan}
 
 \subsection{Player movement}
-This functionality has been redefined under advanced functionality. See ``\textit{Player velocity}''.
+Advanced functionality implemented, see ``\textit{Player velocity}''.
 
 \begin{testplan}{Treasure}
 \test{The treasure sprite is no larger than the player's sprite.}{Start the game and observe the treasure sprite.}{The treasure sprite is 8 pixels high and 8 pixels wide.}{As expected.}
@@ -157,37 +154,58 @@ This functionality has been redefined under advanced functionality. See ``\texti
 \begin{testplan}{Player jumping}
 \test{Pressing the joystick up while the player is supported by a block causes the player to jump.}{Press the joystick up while the player is supported by a block.}{The player is given an upward velocity.}{Not implemented.}
 \test{After UP is pressed, the player should commence to move upwards. Any horizontal motion should continue, and the acceleration provision when the player is not supported by a block will take effect.}{Press joystick up while on a safe block with horizontal motion.}{The player will retain the previous horizontal motion of the block while being given a new upwards velocity.}{Not implemented.}
+\test{Once up is pressed, the joystick has no effect until the player lands on a block or dies.}{Press joystick up to jump when the player is standing on a block, then press joystick up again while the player is still in the air.}{The player will jump once, then will not be affected by the next press and continue its jump.}{Not implemented.}
+\test{Immediately upon landing on a block, the player's velocity changes to match that of the block so it is carried along.}{Make the player jump off a moving safe block so that it falls and lands on another moving safe block.}{When the player lands, it will immediately begin to move horizontally in the same speed and direction as the block, and all vertical motion will cease.}{As expected.}
+\test{If the player jumps off screen, the player dies.}{Make the player jump off any side of the screen.}{The player dies.}{Not implemented.}
+\test{The initial vertical velocity should be sufficient to allow the player to jump through gaps between blocks and land on blocks on the row above.}{From a lower safe block, make the player jump through a gap of blocks in the row above and land.}{The player will jump high enough to land on the row of blocks above.}{Not implemented.}
 \end{testplan}
 
 \begin{testplan}{Player inventory}
-
+\test{At the start of the game, the player has five Food in their inventory.}{Start the game and view the food count on the pause screen.}{The pause screen shows 5 food in the inventory.}{Not implemented.}
+\test{The Food sprite's area (i.e. sprite width * height) is no larger than the player sprites's area.}{Place a Food by pressing joystick down and observe the food sprite.}{The Food sprite is --- pixels wide and --- pixels high.}{Not implemented.}
+\test{When the player is supported by a block and joystick down is pressed, Food appears.}{Press joystick down when the player is supported by a block.}{Food appears where the player is standing.}{Not implemented.}
+\test{The Food must be supported by the block it is on, and overlap the player sprite.}{Place a Food by pressing joystick down and observe the food sprite.}{The Food is supported by the block it is placed on, and overlaps the player sprite.}{Not implemented.}
+\test{When the player is supported by a block and joystick DOWN is pressed, the number of Food in the inventory decreases by one.}{With at least 1 Food in the inventory, view the Food count on the pause screen, place Food by pressing joystick Down, then view the pause screen again.}{The number of Food in the inventory decreases by one.}{Not implemented.}
+\test{The total Food count (inventory + screen) must always equal 5.}{Place Food by pressing joystick down, view the pause screen, and keep doing this until no Food is left in the inventory.}{The total Food count always equals 5.}{Not implemented.}
+\test{Food dropped on a block is carried by the block.}{Stand on a moving safe block and place Food by pressing joystick down.}{The horizontal velocity of the Food matches the horizontal velocity of the block it is placed on.}{Not implemented.}
+\test{Food may overlap.}{Press joystick down twice while standing on a safe block.}{Two Food will be placed on top of each other and overlap.}{Not implemented.}
 \end{testplan}
 
 \begin{testplan}{Zombies}
-
+\test{Five (5) Zombies appear from the top of the screen, and fall straight down without overlapping each other, after the program has been running for approximately 3 seconds.}{Start the game and wait approximately 3 seconds.}{Five Zombies appear from the top of the screen and fall straight down without overlapping each other.}{Not implemented.}
+\test{Zombies stop falling when they land on any block.}{Start the game and observe the Zombie motion.}{The Zombies stop falling when they land on a block.}{Not implemented.}
+\test{If a Zombie falls all the way to the bottom of the screen, it passes from view and does not reappear immediately. The player doesn't get any points for this.}{Start the game and wait for a Zombie to fall off the bottom of the screen. Check the score on the pause screen.}{When the Zombie falls off the bottom of the screen, it passes from view and does not reappear immediately. The player's score does not change.}{Not implemented.}
+\test{After landing on a block, Zombies prowl left and right along the blocks at fixed constant speed relative to the blocks.}{Start the game and observe the Zombie motion.}{Zombies will move faster when moving with the direction of the blocks, and slower when moving against the direction of the blocks.}{Not implemented.}
+\test{Zombies can cross over narrow gaps, and whenever a Zombie reaches a gap that it cannot cross, it reverses and moves in the opposite direction.}{Start the game and observe the Zombie motion.}{Zombies move between blocks with narrow gaps, and reverses and moves in the opposite direction when it encounters a wider gap.}{Not implemented.}
+\test{Zombies may overlap each other if they are moving in opposite directions on the same span of blocks.}{Start the game and observe the Zombie motion.}{If two zombies are moving in opposite directions on the same span of blocks, they overlap and pass through each other.}{Not implemented.}
+\test{If a Zombie is on a block that leaves the screen, the Zombie is carried off the screen; it continues to move along the blocks as if nothing untoward had occurred.}{Start the game and observe the Zombie motion.}{Zombies that are on a block that move off-screen are teleported to the other side of the screen where the block reappears.}{Not implemented.}
+\test{When a Zombie collides with Food, the Zombie disappears, the player gains 10 points, the Food disappears, and the Food inventory increases by 1.}{Place Food in the path of a Zombie and wait for them to collide. Check the score and inventory on the pause screen.}{When the Zombie collides with food, it disappears, the player gains 10 points, the Food disappears, and the Food inventory increases by 1.}{Not implemented.}
+\test{If a Zombie collides simultaneously with multiple Food, then the Zombie consumes one Food, leaving the others unaffected.}{Place two Food on the same block in the path of a Zombie, and wait for the Zombie to collide with it.}{The Zombie and one Food disappears, leaving the other Food still on the block.}{Not implemented.}
+\test{Zombies do not disappear when the player collides with them, but instead the player loses a life and respawns.}{Guide the player to collide with a Zombie.}{The Zombie is unaffected, the player loses a life and respawns.}{Not implemented.}
+\test{Three seconds after the last of the five Zombies disappears, either by feeding or falling out of view, the full complement of five Zombies respawn in the manner noted above.}{Kill all five Zombies by placing Food in their paths or waiting for them to fall off screen, then wait three seconds.}{The five Zombies respawn from the top of the screen.}{Not implemented.}
 \end{testplan}
 
 \begin{testplan}{Pause screen advanced}
-
+\test{The pause screen shows the number of Zombies on screen.}{Start the game and press joystick centre to view the pause screen.}{In addition to other statistics, the pause screen shows the current number of Zombies on screen.}{Not implemented.}
+\test{The pause screen shows the number of Food in inventory.}{Start the game and press joystick centre to view the pause screen.}{In addition to other statistics, the pause screen shows the current number of Food in inventory.}{Not implemented.}
 \end{testplan}
 
 \clearpage
 \section{Specialised Teensy functionality test plan}
 
 \begin{testplan}{ADC for block speed}
-
+\test{All rows of blocks move at the same speed which is proportional to the potentiometer value.}{Star the game and turn the left potentiometer Pot0 down to minimum, then turn it slowly up to maximum.}{The blocks will stop moving, then their speed will slowly increase proportional to the potentiometer value.}{As expected.}
+\test{Block movement speed should range from 0 to a speed where the blocks are still clearly visible.}{Star the game and turn the left potentiometer Pot0 down to minimum, then turn it up to maximum.}{Block speed is zero when the potentiometer is at a minimum, and blocks are still clearly distinguishable and playable at max speed.}{As expected.}
 \end{testplan}
 
 \begin{testplan}{LED warning}
-
-\end{testplan}
-
-\begin{testplan}{Multiple timers}
-
+\test{Both LED0 and LED1 flash at approximately 4Hz (synchronously or asynchronously) before the zombies spawn.}{Start the game and observe the LEDs for the first approximately 3 seconds.}{Both LED0 and LED1 flash at approximately 4Hz synchronously before the zombies spawn.}{Not implemented.}
+\test{Both LED0 and LED1 flash at approximately 4Hz (synchronously or asynchronously) continue to flash until all the zombies have landed or fallen off screen.}{Start the game and observe the LEDs while the zombies spawn.}{Both LED0 and LED1 flash at approximately 4Hz synchronously until all the zombies have landed or fallen off screen.}{Not implemented.}
 \end{testplan}
 
 \begin{testplan}{PWM controlled visual effects}
-
+\test{When the player dies with more than one life remaining, the backlight fades off and the screen fades out so nothing is visible.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The backlight gradually fades out via PWM to zero brightness and the screen contrast decreases to zero.}{Partially implemented.}
+\test{After the screen fades out, the screen gradually goes back to normal contrast, the backlight fades on and the player respawns at the top row of blocks.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The screen fades out, then the backlight gradually turns on via PWM and the screen contrast gradually increases to normal levels.}{Partially implemented.}
 \end{testplan}
 
 \begin{testplan}{Pixel level collision}
@@ -195,11 +213,27 @@ This functionality has been redefined under advanced functionality. See ``\texti
 \end{testplan}
 
 \begin{testplan}{Serial communication events}
-
+\test{When the game starts, the name of event, player x position, and player y position are sent over USB serial.}{Start the game by pressing SW2 while viewing the Teensy serial output from the computer.}{A serial message saying that the game has started, player x position, and player y position are received over USB serial.}{As expected.}
+\test{When the player dies, the name of event, reason for death, lives after death, score, and game time are sent over USB serial.}{Start the game by pressing SW2 and kill the player by any means, while viewing the Teensy serial output from the computer.}{A serial message saying that the player has died, reason for death, lives after death, score, and game time are received over USB serial.}{Not implemented.}
+\test{When the player respawns, the name of event, player x, and player y are sent over USB serial.}{Start the game by pressing SW2, kill the player by any means, and wait for it to respawn, while viewing the Teensy serial output from the computer.}{A serial message saying that the player has respawned, player x, and player y are received over USB serial.}{Not implemented.}
+\test{When the Zombies appear, the name of event, number of zombies, game time, player lives, and player score are sent over USB serial.}{Start the game by pressing SW2 and wait for the Zombies to appear, while viewing the Teensy serial output from the computer.}{A serial message saying that the Zombies have appeared, number of zombies, game time, player lives, and player score are received over USB serial.}{As expected.}
+\test{When the Zombies collide with Food, the name of event, number of zombies on screen after collision, number of Food in inventory after collision, and game time are sent over USB serial.}{Start the game by pressing SW2 while viewing the Teensy serial output from the computer.}{A serial message saying that the game has started, player x position, and player y position are received over USB serial.}{As expected.}
+\test{When the Zombies collide with Food, the name of event, number of zombies on screen after collision, number of Food in inventory after collision, and game time are sent over USB serial.}{Place a Food in the path of a Zombie and wait for the to collide, while viewing the Teensy serial output from the computer.}{A serial message saying that a Zombie has collided with Food, number of zombies on screen after collision, number of Food in inventory after collision, and game time are received over USB serial.}{As expected.}
+\test{When the player collides with the treasure, the name of event, score, lives, game time, and position of player after returning to the top row are sent over USB serial.}{Guide the player to collide with the treasure while avoiding Zombies and forbidden blocks, while viewing the Teensy serial output from the computer.}{A serial message saying that the player has collided with the treasure, score, lives, game time, and position of player are received over USB serial.}{As expected.}
+\test{When the pause button is pressed, the name of event, player lives, player score, game time, number of zombies on screen, number of Food in inventory are sent over USB serial.}{Start the game by pressing SW2 and pause the game by pressing SW3, while viewing the Teensy serial output from the computer.}{A serial message saying that the pause button was pressed, player lives, player score, game time, number of zombies on screen, number of Food in inventory are received over USB serial.}{As expected.}
+\test{When the game is over, the name of event, player lives, player score, game time, total number of zombies fed are sent over USB serial.}{Kill the player repeatedly by any means until all lives are gone, while viewing the Teensy serial output from the computer.}{When all lives are lost, a serial message saying that the game is over, player lives, player score, game time, total number of zombies fed are received over USB serial.}{As expected.}
 \end{testplan}
 
 \begin{testplan}{Serial communication game control}
-
+\test{When `s' is sent from the intro screen, the game is started.}{Turn on the Teensy and send `s' over USB serial.}{The game is started.}{As expected.}
+\test{When `a' is sent while the game is running, the character moves left.}{Start the game and send `a' over USB serial.}{The character moves left according to normal player movement.}{As expected.}
+\test{When `d' is sent while the game is running, the character moves right.}{Start the game and send `d' over USB serial.}{The character moves right according to normal player movement.}{As expected.}
+\test{When `w' is sent while the game is running, the character jumps}{Start the game and send `w' over USB serial.}{The character jumps according to normal player movement.}{Not implemented.}
+\test{When `t' is sent while the game is running, the treasure starts and stops moving.}{Start the game and send `t' over USB serial twice with a pause in between when the treasure is visible and moving.}{The treasure motion stops then starts again.}{As expected.}
+\test{When `s' is sent while the game is running, Food is dropped where the player stands.}{Start the game and send `s' over USB serial while the player is on a safe block and has Food in inventory.}{A Food is dropped where the player stands.}{Not implemented.}
+\test{When `p' is sent while the game is running, the game is paused and game information is displayed.}{Start the game and send `p' over USB serial.}{The game is paused and game information is displayed.}{As expected.}
+\test{When `r' is sent after game over, the game is restarted.}{Kill the player by any means until the player has run out of lives and the game over screen is displayed, then send `r' over USB serial.}{The game is reset and restarts from the beginning.}{Not implemented.}
+\test{When `q' is sent after game over, the student number screen is displayed.}{Kill the player by any means until the player has run out of lives and the game over screen is displayed, then send `q' over USB serial.}{The screen clears and the student number screen is displayed.}{Not implemented.}
 \end{testplan}
 
 \clearpage
