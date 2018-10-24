@@ -29,14 +29,13 @@ CAB202 project, Semester 2 2018
 #include <macros.h>
 #include <usb_serial.h>
 #include <cab202_adc.h>
+#include <ram_utils.h>
 
 // Defines
 #define STUDENT_NAME "Jarod Lam"
 #define STUDENT_NUMBER "n9625607"
 #define GAME_NAME "Jumpy Boi 2"
 #define DELAY 10
-#define MIN_SCREEN_WIDTH 80
-#define MIN_SCREEN_HEIGHT 50
 
 #define PLAYER_WIDTH 9
 #define PLAYER_HEIGHT 8
@@ -67,6 +66,7 @@ CAB202 project, Semester 2 2018
 #define OVERFLOW_TOP 1023
 #define ADC_MAX 1023
 #define DAC_MAX 1023
+#define F(s) load_rom_string(PSTR(s))
 
 /* ========================================================================== */
 /*  Global variables and types                                                */
@@ -131,15 +131,15 @@ volatile uint32_t overflow_counter = 0;  // For tracking time
 /*  Sprites                                                                   */
 /* ========================================================================== */
 
-uint8_t safe_sprite[] = {
+const char PROGMEM safe_sprite[] = {
 	0b11111111, 0b11000000,
 	0b11111111, 0b11000000
 };
-uint8_t forbidden_sprite[] = {
+const char PROGMEM forbidden_sprite[] = {
 	0b10101010, 0b10000000,
 	0b01010101, 0b01000000
 };
-uint8_t player_sprite[] = {
+const char PROGMEM player_sprite[] = {
 	0b11110111, 0b10000000,
 	0b11011101, 0b10000000,
 	0b01000001, 0b00000000,
@@ -149,7 +149,7 @@ uint8_t player_sprite[] = {
 	0b01000001, 0b00000000,
 	0b00111110, 0b00000000 
 };
-uint8_t treasure_sprite[] = {
+const char PROGMEM treasure_sprite[] = {
 	0b00000111, 0b10000000,
 	0b00001111, 0b10000000,
 	0b00010011, 0b10000000,
@@ -228,9 +228,8 @@ void setup_backlight();
 void set_backlight(int duty_cycle);
 
 // Helper functions
-void draw_string_centre(int y_offset, const char *string);
-void draw_string_centre_P(int y_offset, const char *string);
-void draw_formatted_centre(int y_offset, const char * format, ...);
+void draw_centref(int y_offset, const char * format, ...);
+void draw_centref_P(int y_offset, const char * format, ...);
 int screen_width();
 int screen_height();
 double get_elapsed_time();
@@ -295,7 +294,7 @@ void reset() {
 	setup_treasure();
 	clear_screen();
 	show_screen();
-	usb_serial_sendf("Game started. player x=%0.1f, player y=%0.1f\n",
+	usb_serial_sendf(F("Game started. player x=%0.1f, player y=%0.1f\n"),
 		sprite_x(player.sprite), sprite_y(player.sprite));
 }
 
@@ -325,10 +324,10 @@ intro_screen
 */
 void intro_screen() {
 	clear_screen();
-	draw_string_centre_P(-16, PSTR(GAME_NAME));
-	draw_string_centre_P(-8, PSTR(STUDENT_NAME));
-	draw_string_centre_P(0, PSTR(STUDENT_NUMBER));
-	draw_string_centre_P(8, PSTR("SW2 TO START"));
+	draw_centref(-16, F(GAME_NAME));
+	draw_centref(-8, F(STUDENT_NAME));
+	draw_centref(0, F(STUDENT_NUMBER));
+	draw_centref(8, F("SW2 TO START"));
 	show_screen();
 	while (!(read_switch(SW2) || usb_serial_getchar() == 's'));
 	srand(TCNT3);  // Use the timer to seed the RNG
@@ -345,16 +344,24 @@ void pause_screen() {
 	get_printable_time(time_string);
 	
 	clear_screen();
-	draw_string_centre_P(-16, PSTR("PAUSED"));
-	draw_formatted_centre(-8, "Lives: %d", player.lives);
-	draw_formatted_centre(0, "Score: %d", player.score);
-	draw_string_centre(8, time_string);
+	draw_centref(-16, F("PAUSED"));
+	draw_centref(-8, F("Lives: %d"), player.lives);
+	draw_centref(0, F("Score: %d"), player.score);
+	draw_centref(8, time_string);
 	show_screen();
 	
 	_delay_ms(500);
 	while (!read_switch(SWC));   // Wait for joystick to be pressed
 	_delay_ms(200);
 	overflow_counter -= overflow_counter - pause_overflow; // Subtract pause
+}
+
+/*
+game_over_screen
+	Game over screen when the player loses all lives
+*/
+void game_over_screen(bool *game_running) {
+	
 }
 
 /* ========================================================================== */
@@ -371,8 +378,9 @@ void setup_player() {
 	player.move_dir = 0;
 	player.resid_speed = 0;
 	// Create the player sprite
+	char *sprite = load_rom_bitmap(player_sprite, PLAYER_WIDTH*PLAYER_HEIGHT);
 	player.sprite = sprite_create(PLAYER_START_X, PLAYER_START_Y,
-	                              PLAYER_WIDTH, PLAYER_HEIGHT, player_sprite);
+	                                       PLAYER_WIDTH, PLAYER_HEIGHT, sprite);
 }
 
 /*
@@ -448,7 +456,7 @@ void player_block_collision() {
 	if (player.curr_block >= 0) return;
 	// Check for a collided block
 	int b = check_block_collision(player.sprite);
-	usb_serial_sendf(PSTR("Player collided with block %d\n"), b);
+	usb_serial_sendf(F("Player collided with block %d\n"), b);
 	if (b < 0) return;  // Exit if no collision
 	else if (!block_array[b].safe) player_die();  // Die if block is forbidden
 	else if (sprite_y(player.sprite) == sprite_y(block_array[b].sprite)+1);
@@ -513,11 +521,9 @@ void player_die() {
 	// Fade out
 	int backlight_step = (DAC_MAX+1) / 16;
 	int contrast_step = (LCD_DEFAULT_CONTRAST+1) / 16;
-	usb_serial_sendf("%d\n", contrast_step);
 	for (int i = 15; i >= 0; i--) {
 		set_backlight(i * backlight_step);
 		LCD_CMD(lcd_set_contrast, i * contrast_step);
-		usb_serial_sendf("%d\n", i*backlight_step);
 		_delay_ms(50);
 	}
 	setup_player();
@@ -526,7 +532,6 @@ void player_die() {
 	for (int i = 1; i <= 15; i++) {
 		set_backlight(i * backlight_step);
 		LCD_CMD(lcd_set_contrast, i * contrast_step);
-		usb_serial_sendf("%d\n", i*contrast_step);
 		_delay_ms(50);
 	}
 	set_backlight(DAC_MAX);
@@ -607,8 +612,9 @@ block_t *create_starting_block() {
 	block_array[0].row = 0;
 	block_array[0].column = 0;
 	block_array[0].safe = true;
+	char *sprite = load_rom_bitmap(safe_sprite, BLOCK_WIDTH*BLOCK_HEIGHT);
 	block_array[0].sprite = sprite_create(0, ROW_HEIGHT-2,
-		                                BLOCK_WIDTH, BLOCK_HEIGHT, safe_sprite);
+		                                     BLOCK_WIDTH, BLOCK_HEIGHT, sprite);
 	return &block_array[0];
 }
 
@@ -620,7 +626,9 @@ block_t *create_block(int curr_row, int curr_col, bool safe, int curr_block) {
 	// Calculate some parameters
 	int x = curr_col * COL_WIDTH;
 	int y = (curr_row+1) * ROW_HEIGHT - 2;
-	uint8_t *sprite = safe ? safe_sprite : forbidden_sprite;
+	uint8_t *sprite = safe
+		          ? load_rom_bitmap(safe_sprite, BLOCK_WIDTH*BLOCK_HEIGHT)
+	              : load_rom_bitmap(forbidden_sprite, BLOCK_WIDTH*BLOCK_HEIGHT);
 	// Apply these parameters to the block in block_array
 	block_array[curr_block].row = curr_row;
 	block_array[curr_block].column = curr_col;
@@ -691,8 +699,10 @@ setup_treasure
 	Sets up treasure location and velocity
 */
 void setup_treasure() {
+	char* sprite = load_rom_bitmap(treasure_sprite, 
+	                                            TREASURE_WIDTH*TREASURE_HEIGHT);
 	treasure.sprite = sprite_create(1, screen_height()-TREASURE_HEIGHT-3,
-		                      TREASURE_WIDTH, TREASURE_HEIGHT, treasure_sprite);
+		                               TREASURE_WIDTH, TREASURE_HEIGHT, sprite);
 	sprite_turn_to(treasure.sprite, TREASURE_SPEED, 0);
 	treasure.moving = true;
 }
@@ -731,8 +741,8 @@ void treasure_collect() {
 		setup_player();
 		char time_string[10];
 		get_printable_time(time_string);
-		usb_serial_sendf("Player collided with treasure. score=%d, lives=%d, \
-game time=%s, player x=%0.1f, player y=%0.1f\n", player.score, player.lives,
+		usb_serial_sendf(F("Player collided with treasure. score=%d, lives=%d, \
+game time=%s, player x=%0.1f, player y=%0.1f\n"), player.score, player.lives,
 			time_string, sprite_x(player.sprite), sprite_y(player.sprite));
 	}
 }
@@ -1097,43 +1107,21 @@ void set_backlight(int duty_cycle) {
 /* ========================================================================== */
 
 /*
-draw_string_centre
-	Draws string in the centre of the screen at a y offsett
-Parameters:
-	int y_offset    The height at which to draw the string
-*/
-void draw_string_centre(int y_offset, const char *string) {
-	int length = strlen(string) * CHAR_WIDTH;
-	int x = screen_width()/2 - length / 2;
-	int y = screen_height()/2 + y_offset;
-	draw_string(x, y, (char *) string, FG_COLOUR);
-}
-
-/*
-draw_string_centre_P
-	PROGMEM version of draw_string_centre
-Parameters:
-	int y_offset    The height at which to draw the string
-*/
-void draw_string_centre_P(int y_offset, const char *string) {
-	char buffer[100];
-	strcpy_P(buffer, string);
-	draw_string_centre(y_offset, buffer);
-}
-
-/*
-draw_formatted_centre
+draw_centref
 	Draws string in the centre of the screen formatted using snprintf
 Parameters:
 	int y_offset            The height at which to draw the string
 	const char *format...    vsprintf arguments
 */
-void draw_formatted_centre(int y_offset, const char * format, ...) {
+void draw_centref(int y_offset, const char * format, ...) {
 	va_list args;
 	va_start(args, format);
 	char string[100];
 	vsprintf(string, format, args);
-	draw_string_centre(y_offset, string);
+	int length = strlen(string) * CHAR_WIDTH;
+	int x = screen_width()/2 - length / 2;
+	int y = screen_height()/2 + y_offset;
+	draw_string(x, y, (char *) string, FG_COLOUR);
 }
 
 /*
