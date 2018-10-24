@@ -181,6 +181,8 @@ void player_physics();
 void player_standing();
 void player_block_motion();
 void player_block_collision();
+void player_block_forbidden();
+void player_block_score();
 void player_control();
 void player_die();
 void player_jump();
@@ -365,7 +367,7 @@ setup_player (void)
 */
 void setup_player() {
 	// Defaults
-	player.prev_block = -1;
+	player.prev_block = 0;
 	player.move_dir = 0;
 	player.resid_speed = 0;
 	// Create the player sprite
@@ -380,17 +382,19 @@ update_player
 void update_player() {
 	sprite_step(player.sprite);
 	player.sprite->dx = player.resid_speed;
+	player.curr_block = get_current_block(player.sprite);
 
-	// Player control
 	player_standing();
 	player_physics();
 	player_block_motion();
 	//player_block_collision();
+	player_block_forbidden();
+	player_block_score();
 	player_jump();
 	player_control();
 	player_boundaries();
-	usb_serial_sendf("Player current block %d\n", player.curr_block);
 	
+	player.prev_block = player.curr_block;
 	sprite_draw(player.sprite);
 }
 
@@ -414,14 +418,10 @@ player_standing
 	Handles the player standing on blocks
 */
 void player_standing() {
-	// Get the current standing block index
-	player.curr_block = get_current_block(player.sprite);
 	// If just landed on a block, set the player's move speed to 0
 	if (player.prev_block < 0 && player.curr_block >= 0) {
 		player.move_dir = 0;
 	}
-	// Update the previous block with the current block
-	player.prev_block = player.curr_block;
 }
 
 /*
@@ -440,6 +440,7 @@ void player_block_motion() {
 }
 
 /*
+player_block_collision
 	Handles the player colliding with a block
 */
 void player_block_collision() {
@@ -454,6 +455,29 @@ void player_block_collision() {
 	else {  // Set the horizontal motion to 0
 		//player.sprite->x -= player.sprite->dx;
 		player.move_dir = 0;
+	}
+}
+
+/*
+player_block_forbidden
+	Kills the player if stepping on a forbidden block
+*/
+void player_block_forbidden() {
+	if (player.curr_block < 0) return;
+	if (!block_array[player.curr_block].safe) {
+		player_die();
+	}
+}
+
+/*
+player_block_score
+	Gives the player a point if stepping on a new safe block
+*/
+void player_block_score() {
+	if (player.curr_block < 0) return;
+	if (player.prev_block != player.curr_block &&
+	    block_array[player.curr_block].safe) {
+		player.score++;
 	}
 }
 

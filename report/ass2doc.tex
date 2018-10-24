@@ -65,7 +65,7 @@
 18 & Direct control of LCD & Not implemented \\ \midrule
 19 & Multiple timers & Partially implemented \\ \midrule
 20 & Program (flash) memory & Partially implemented \\ \midrule
-21 & PWM controlled visual effects & Partially implemented \\ \midrule
+21 & PWM controlled visual effects & Fully implemented \\ \midrule
 22 & Pixel level collision & Not implemented \\ \midrule
 23 & Serial communication events & Partially implemented \\ \midrule
 24 & Serial communication game control & Partially implemented \\
@@ -121,7 +121,7 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 
 \begin{testplan}{Basic game mechanics}
 \test{The player starts with 10 lives.}{Start the game and press joystick centre to view the player's lives on the pause screen.}{The player has 10 lives.}{As expected.}
-\test{A point is scored every time the player lands on a safe block.}{Move the player around onto multiple safe blocks, then press joystick centre to check the score.}{The player's score goes up when landing on a safe block.}{Not implemented.}
+\test{A point is scored every time the player lands on a safe block.}{Move the player around onto multiple safe blocks, then press joystick centre to check the score.}{The player's score goes up when landing on a safe block.}{As expected.}
 \test{The player dies if any part of the player sprite moves off the screen in any direction or manner.}{Guide the player off the sides or bottom of the screen.}{The player dies when it hits the edges of the screen.}{As expected.}
 \test{On death, the player respawns on the `starting block'}{Kill the player using any method imaginable while having 2 lives or more.}{The player dies and respawns on the stationary `starting block'.}{As expected.}
 \test{When the player loses all their lives, the game over screen is displayed which displays a game over message, total score, and game play time.}{Kill the player repeatedly until all lives are gone.}{The game over screen is displayed showing a message, total score, and game play time in mm:ss format.}{Not implemented.}
@@ -204,8 +204,8 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \end{testplan}
 
 \begin{testplan}{PWM controlled visual effects}
-\test{When the player dies with more than one life remaining, the backlight fades off and the screen fades out so nothing is visible.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The backlight gradually fades out via PWM to zero brightness and the screen contrast decreases to zero.}{Partially implemented.}
-\test{After the screen fades out, the screen gradually goes back to normal contrast, the backlight fades on and the player respawns at the top row of blocks.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The screen fades out, then the backlight gradually turns on via PWM and the screen contrast gradually increases to normal levels.}{Partially implemented.}
+\test{When the player dies with more than one life remaining, the backlight fades off and the screen fades out so nothing is visible.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The backlight gradually fades out via PWM to zero brightness and the screen contrast decreases to zero.}{Fully implemented.}
+\test{After the screen fades out, the screen gradually goes back to normal contrast, the backlight fades on and the player respawns at the top row of blocks.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The screen fades out, then the backlight gradually turns on via PWM and the screen contrast gradually increases to normal levels.}{Fully implemented.}
 \end{testplan}
 
 \begin{testplan}{Pixel level collision}
