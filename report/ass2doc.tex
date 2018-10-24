@@ -55,7 +55,7 @@
 8 & Basic game mechanics & Partially implemented \\ \midrule
 9 & Block movement & Fully implemented \\ \midrule
 10 & Player velocity & Partially implemented \\ \midrule
-11 & Player jumping & Not implemented \\ \midrule
+11 & Player jumping & Fully implemented \\ \midrule
 12 & Player inventory & Not implemented \\ \midrule
 13 & Zombies & Not implemented \\ \midrule
 14 & Pause screen advanced & Not implemented \\ \midrule
@@ -152,12 +152,12 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \end{testplan}
 
 \begin{testplan}{Player jumping}
-\test{Pressing the joystick up while the player is supported by a block causes the player to jump.}{Press the joystick up while the player is supported by a block.}{The player is given an upward velocity.}{Not implemented.}
-\test{After UP is pressed, the player should commence to move upwards. Any horizontal motion should continue, and the acceleration provision when the player is not supported by a block will take effect.}{Press joystick up while on a safe block with horizontal motion.}{The player will retain the previous horizontal motion of the block while being given a new upwards velocity.}{Not implemented.}
-\test{Once up is pressed, the joystick has no effect until the player lands on a block or dies.}{Press joystick up to jump when the player is standing on a block, then press joystick up again while the player is still in the air.}{The player will jump once, then will not be affected by the next press and continue its jump.}{Not implemented.}
+\test{Pressing the joystick up while the player is supported by a block causes the player to jump.}{Press the joystick up while the player is supported by a block.}{The player is given an upward velocity.}{As expected.}
+\test{After UP is pressed, the player should commence to move upwards. Any horizontal motion should continue, and the acceleration provision when the player is not supported by a block will take effect.}{Press joystick up while on a safe block with horizontal motion.}{The player will retain the previous horizontal motion of the block while being given a new upwards velocity.}{As expected.}
+\test{Once up is pressed, the joystick has no effect until the player lands on a block or dies.}{Press joystick up to jump when the player is standing on a block, then press joystick up again while the player is still in the air.}{The player will jump once, then will not be affected by the next press and continue its jump.}{As expected.}
 \test{Immediately upon landing on a block, the player's velocity changes to match that of the block so it is carried along.}{Make the player jump off a moving safe block so that it falls and lands on another moving safe block.}{When the player lands, it will immediately begin to move horizontally in the same speed and direction as the block, and all vertical motion will cease.}{As expected.}
-\test{If the player jumps off screen, the player dies.}{Make the player jump off any side of the screen.}{The player dies.}{Not implemented.}
-\test{The initial vertical velocity should be sufficient to allow the player to jump through gaps between blocks and land on blocks on the row above.}{From a lower safe block, make the player jump through a gap of blocks in the row above and land.}{The player will jump high enough to land on the row of blocks above.}{Not implemented.}
+\test{If the player jumps off screen, the player dies.}{Make the player jump off any side of the screen.}{The player dies.}{As expected.}
+\test{The initial vertical velocity should be sufficient to allow the player to jump through gaps between blocks and land on blocks on the row above.}{From a lower safe block, make the player jump through a gap of blocks in the row above and land.}{The player will jump high enough to land on the row of blocks above.}{As expected.}
 \end{testplan}
 
 \begin{testplan}{Player inventory}

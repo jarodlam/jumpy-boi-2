@@ -41,11 +41,11 @@ CAB202 project, Semester 2 2018
 #define PLAYER_WIDTH 9
 #define PLAYER_HEIGHT 8
 #define PLAYER_START_X 1
-#define PLAYER_START_Y 1
-#define JUMP_SPEED 0.15
+#define PLAYER_START_Y 2
+#define JUMP_SPEED 1.5
 #define MOVE_SPEED 1
 #define ACCEL_GRAV 0.1
-#define TERMINAL_VEL 2
+#define TERMINAL_VEL 1
 #define INITIAL_LIVES 10
 #define ANIM_DURATION 20
 
@@ -98,10 +98,10 @@ typedef struct player_t {
 	sprite_id sprite;     // The sprite object for the player
 	int lives;            // Current number of lives
 	int score;            // Current score
-	bool dead;            // Flag for if the player is dying/dead
 	int prev_block;       // Index of the previous block the player stepped on
 	int curr_block;       // Index of block the player is on
 	int move_dir;         // Direction of movement for player from -1 to 1
+	double resid_speed;    // Residual speed from previous block standing
 } player_t;
 
 /*
@@ -121,7 +121,7 @@ block_t block_array[MAX_BLOCKS];  // Block struct array
 int num_rows;
 int num_cols;
 int num_blocks;
-int block_speed;
+double block_speed;
 
 volatile uint8_t state_count[7] = {0,0,0,0,0,0,0};
 volatile bool switch_closed[7] = {0,0,0,0,0,0,0};
@@ -183,6 +183,8 @@ void player_block_motion();
 void player_block_collision();
 void player_control();
 void player_die();
+void player_jump();
+void player_boundaries();
 
 // Blocks
 void setup_blocks();
@@ -258,15 +260,10 @@ int main(void) {
 		reset();
 		while (player.lives > 0) {
 			// Loop until dead, then reset
-			player.dead = false;
-			while (sprite_y(player.sprite) < screen_height()) {
-				clear_screen();
-				process();
-				show_screen();
-				_delay_ms(DELAY);
-			}
-			player.lives--;
-			setup_player();
+			clear_screen();
+			process();
+			show_screen();
+			_delay_ms(DELAY);
 		}
 		//game_over(&game_running);
 	}
@@ -369,7 +366,8 @@ setup_player (void)
 void setup_player() {
 	// Defaults
 	player.prev_block = -1;
-	player.dead = false;
+	player.move_dir = 0;
+	player.resid_speed = 0;
 	// Create the player sprite
 	player.sprite = sprite_create(PLAYER_START_X, PLAYER_START_Y,
 	                              PLAYER_WIDTH, PLAYER_HEIGHT, player_sprite);
@@ -381,15 +379,17 @@ update_player
 */
 void update_player() {
 	sprite_step(player.sprite);
-	
-	player.sprite->dx = 0;
+	player.sprite->dx = player.resid_speed;
 
 	// Player control
 	player_standing();
 	player_physics();
 	player_block_motion();
 	//player_block_collision();
+	player_jump();
 	player_control();
+	player_boundaries();
+	usb_serial_sendf("Player current block %d\n", player.curr_block);
 	
 	sprite_draw(player.sprite);
 }
@@ -401,7 +401,7 @@ player_physics
 void player_physics() {
 	double dx = sprite_dx(player.sprite);
 	double dy = sprite_dy(player.sprite);
-	if (player.curr_block >= 0) {
+	if (player.curr_block >= 0 && player.sprite->dy >= 0) {
 		dy = 0;
 	} else {
 		dy += ACCEL_GRAV;
@@ -416,7 +416,6 @@ player_standing
 void player_standing() {
 	// Get the current standing block index
 	player.curr_block = get_current_block(player.sprite);
-	//usb_serial_sendf("Player current block %d\n", player.curr_block);
 	// If just landed on a block, set the player's move speed to 0
 	if (player.prev_block < 0 && player.curr_block >= 0) {
 		player.move_dir = 0;
@@ -436,6 +435,7 @@ void player_block_motion() {
 	double dx = sprite_dx(player.sprite);
 	double dy = sprite_dy(player.sprite);
 	dx = sprite_dx(block_array[player.curr_block].sprite);
+	player.resid_speed = dx;
 	sprite_turn_to(player.sprite, dx, dy);
 }
 
@@ -452,7 +452,7 @@ void player_block_collision() {
 	else if (!block_array[b].safe) player_die();  // Die if block is forbidden
 	else if (sprite_y(player.sprite) == sprite_y(block_array[b].sprite)+1);
 	else {  // Set the horizontal motion to 0
-		player.sprite->x -= player.sprite->dx;
+		//player.sprite->x -= player.sprite->dx;
 		player.move_dir = 0;
 	}
 }
@@ -464,7 +464,11 @@ player_control
 void player_control() {
 	double dx = sprite_dx(player.sprite);
 	double dy = sprite_dy(player.sprite);
-	dx += player.move_dir * MOVE_SPEED;
+	if (block_speed >= MOVE_SPEED) {
+		dx = block_speed * 0.1;
+	} else {
+		dx += player.move_dir * MOVE_SPEED;
+	}
 	sprite_turn_to(player.sprite, dx, dy);
 	// Exit the function if not standing on a block
 	if (player.curr_block < 0) return;
@@ -480,23 +484,60 @@ player_die
 	Animates the player dying and then resets the player position
 */
 void player_die() {
+	player.lives--;
 	LCD_CMD(lcd_set_function, lcd_instr_extended);
 	// Fade out
-	int backlight_step = DAC_MAX+1 / 16;
-	int contrast_step = LCD_DEFAULT_CONTRAST+1 / 16;
+	int backlight_step = (DAC_MAX+1) / 16;
+	int contrast_step = (LCD_DEFAULT_CONTRAST+1) / 16;
+	usb_serial_sendf("%d\n", contrast_step);
 	for (int i = 15; i >= 0; i--) {
 		set_backlight(i * backlight_step);
 		LCD_CMD(lcd_set_contrast, i * contrast_step);
+		usb_serial_sendf("%d\n", i*backlight_step);
 		_delay_ms(50);
 	}
 	setup_player();
+	process();
 	// Fade in
-	for (int i = 1; i <= 16; i++) {
+	for (int i = 1; i <= 15; i++) {
 		set_backlight(i * backlight_step);
 		LCD_CMD(lcd_set_contrast, i * contrast_step);
+		usb_serial_sendf("%d\n", i*contrast_step);
 		_delay_ms(50);
 	}
+	set_backlight(DAC_MAX);
 	LCD_CMD(lcd_set_function, lcd_instr_basic);
+}
+
+/*
+player_jump
+	Controls player jumping
+*/
+void player_jump() {
+	if (player.curr_block < 0) return;  // Exit if not grounded
+	double dx = sprite_dx(player.sprite);
+	double dy = sprite_dy(player.sprite);
+	if (read_switch(SWU)) {
+		dy = -JUMP_SPEED;
+	}
+	sprite_turn_to(player.sprite, dx, dy);
+}
+
+/*
+player_boundaries
+	Kills the player if it's out of bounds
+*/
+void player_boundaries() {
+	int pw = sprite_width(player.sprite);
+	int ph = sprite_height(player.sprite);
+	int pl = round(sprite_x(player.sprite));
+	int pt = round(sprite_y(player.sprite));
+	int pr = pl + pw;
+	int pb = pt + ph;
+	// Check collision with sides of screen
+	if (pl < 1 || pt < 1 || pb > screen_height() || pr > screen_width()) {
+		player_die();
+	}
 }
 
 /* ========================================================================== */
@@ -601,8 +642,9 @@ void update_blocks() {
 		sprite_id curr_sprite = block_array[i].sprite;
 		sprite_step(curr_sprite);
 		// Set block speed according to potentiometer
-		curr_sprite->dx = pow(-1,block_array[i].row) 
+		block_speed = pow(-1,block_array[i].row) 
 			                                  * adc_read(POT0) * ROW_SPEED_MULT;
+		curr_sprite->dx = block_speed;
 		// Wrap around the screen
 		int x = sprite_x(curr_sprite);
 		int y = sprite_y(curr_sprite);
@@ -887,7 +929,12 @@ bool read_switch(int switch_id) {
 	if (switch_id > 6 || switch_id < 0) {
 		return false;
 	} else {
-		return switch_closed[switch_id];
+		bool state = switch_closed[switch_id];
+		//usb_serial_sendf("%d %d\n",switch_id, state_count[switch_id]);
+		state_count[switch_id] = 0b00000000;
+		switch_closed[switch_id] = false;
+		//usb_serial_sendf("%d %d\n",switch_id, state_count[switch_id]);
+		return state;
 	}
 }
 
