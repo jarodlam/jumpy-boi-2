@@ -56,9 +56,9 @@
 9 & Block movement & Fully implemented \\ \midrule
 10 & Player velocity & Fully implemented \\ \midrule
 11 & Player jumping & Fully implemented \\ \midrule
-12 & Player inventory & Not implemented \\ \midrule
+12 & Player inventory & Fully implemented \\ \midrule
 13 & Zombies & Not implemented \\ \midrule
-14 & Pause screen advanced & Not implemented \\ \midrule
+14 & Pause screen advanced & Partially implemented \\ \midrule
 15 & ADC for block speed & Fully implemented \\ \midrule
 16 & Switch debouncing & Fully implemented \\ \midrule
 17 & LED warning & Not implemented \\ \midrule
@@ -161,14 +161,14 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \end{testplan}
 
 \begin{testplan}{Player inventory}
-\test{At the start of the game, the player has five Food in their inventory.}{Start the game and view the food count on the pause screen.}{The pause screen shows 5 food in the inventory.}{Not implemented.}
-\test{The Food sprite's area (i.e. sprite width * height) is no larger than the player sprites's area.}{Place a Food by pressing joystick down and observe the food sprite.}{The Food sprite is --- pixels wide and --- pixels high.}{Not implemented.}
-\test{When the player is supported by a block and joystick down is pressed, Food appears.}{Press joystick down when the player is supported by a block.}{Food appears where the player is standing.}{Not implemented.}
-\test{The Food must be supported by the block it is on, and overlap the player sprite.}{Place a Food by pressing joystick down and observe the food sprite.}{The Food is supported by the block it is placed on, and overlaps the player sprite.}{Not implemented.}
-\test{When the player is supported by a block and joystick DOWN is pressed, the number of Food in the inventory decreases by one.}{With at least 1 Food in the inventory, view the Food count on the pause screen, place Food by pressing joystick Down, then view the pause screen again.}{The number of Food in the inventory decreases by one.}{Not implemented.}
-\test{The total Food count (inventory + screen) must always equal 5.}{Place Food by pressing joystick down, view the pause screen, and keep doing this until no Food is left in the inventory.}{The total Food count always equals 5.}{Not implemented.}
-\test{Food dropped on a block is carried by the block.}{Stand on a moving safe block and place Food by pressing joystick down.}{The horizontal velocity of the Food matches the horizontal velocity of the block it is placed on.}{Not implemented.}
-\test{Food may overlap.}{Press joystick down twice while standing on a safe block.}{Two Food will be placed on top of each other and overlap.}{Not implemented.}
+\test{At the start of the game, the player has five Food in their inventory.}{Start the game and view the food count on the pause screen by pressing joystick centre..}{The pause screen shows 5 food in the inventory.}{As expected.}
+\test{The Food sprite's area (i.e. sprite width * height) is no larger than the player sprites's area.}{Place a Food by pressing joystick down and observe the food sprite.}{The Food sprite is 3 pixels wide and 3 pixels high.}{As expected}
+\test{When the player is supported by a block and joystick down is pressed, Food appears.}{Press joystick down when the player is supported by a block.}{Food appears where the player is standing.}{As expected.}
+\test{The Food must be supported by the block it is on, and overlap the player sprite.}{Place a Food by pressing joystick down and observe the food sprite.}{The Food is supported by the block it is placed on, and overlaps the player sprite.}{As expected.}
+\test{When the player is supported by a block and joystick DOWN is pressed, the number of Food in the inventory decreases by one.}{With at least 1 Food in the inventory, view the Food count on the pause screen, place Food by pressing joystick Down, then view the pause screen again.}{The number of Food in the inventory decreases by one.}{As expected.}
+\test{The total Food count (inventory + screen) must always equal 5.}{Place Food by pressing joystick down, view the pause screen, and keep doing this until no Food is left in the inventory.}{The total Food count always equals 5.}{As expected.}
+\test{Food dropped on a block is carried by the block.}{Stand on a moving safe block and place Food by pressing joystick down, then watch as it moves off screen.}{The horizontal velocity of the Food matches the horizontal velocity of the block it is placed on, and Food wraps around the screen.}{As expected.}
+\test{Food may overlap.}{Press joystick down twice while standing on a safe block.}{Two Food will be placed on top of each other and overlap.}{As expected.}
 \end{testplan}
 
 \begin{testplan}{Zombies}

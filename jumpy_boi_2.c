@@ -107,6 +107,7 @@ typedef struct treasure_t {
 typedef struct food_t {
 	sprite_id sprite;  // The sprite object for the food
 	int curr_block;    // Index of block the food is on
+	int x_offset;      // x offset of food from block
 } food_t;
 
 // Global variables
@@ -219,6 +220,10 @@ void treasure_collect();
 // Food
 void setup_food();
 void update_food();
+void food_block_wrap(food_t *food);
+void food_place();
+int food_search();
+int food_inventory();
 
 // Collision
 bool bounding_box_collision (sprite_id s1, sprite_id s2);
@@ -313,6 +318,7 @@ void reset() {
 	setup_blocks();
 	setup_player();
 	setup_treasure();
+	setup_food();
 	clear_screen();
 	show_screen();
 	usb_serial_sendf(F("Game started. player x=%0.1f, player y=%0.1f\n"),
@@ -328,8 +334,9 @@ void process() {
 	clear_screen();
 	pause_screen();
 	update_usb_serial();
-	update_blocks();
 	update_player();
+	update_food();
+	update_blocks();
 	update_treasure();
 	show_screen();
 }
@@ -365,10 +372,12 @@ void pause_screen() {
 	get_printable_time(time_string);
 	
 	clear_screen();
-	draw_centref(-16, "PAUSED");
-	draw_centref(-8, "Lives: %d", player.lives);
-	draw_centref(0, "Score: %d", player.score);
-	draw_centref(8, time_string);
+	draw_centref(-24, "PAUSED");
+	draw_centref(-16, "Lives: %d", player.lives);
+	draw_centref(-8, "Score: %d", player.score);
+	draw_centref(0, "Time: %s", time_string);
+	draw_centref(8, "Zombies: ");
+	draw_centref(16, "Food: %d", food_inventory());
 	show_screen();
 	
 	_delay_ms(500);
@@ -385,11 +394,11 @@ void game_over_screen(bool *game_running) {
 	char time_string[10];
 	get_printable_time(time_string);
 	clear_screen();
-	draw_centref(-16, F("YOU DIED :("));
-	draw_centref(-8, F("Total score: %d"), player.score);
-	draw_centref(0, F("Play time: %s"), time_string);
-	draw_centref(8, F("SW3 to reset"));
-	draw_centref(16, F("SW2 to end"));
+	draw_centref(-24, F("YOU DIED :("));
+	draw_centref(-16, F("Total score: %d"), player.score);
+	draw_centref(-8, F("Play time: %s"), time_string);
+	draw_centref(0, F("SW3 to reset"));
+	draw_centref(8, F("SW2 to end"));
 	show_screen();
 	while (1) {
 		if (read_switch(SW2)) {
@@ -738,8 +747,8 @@ void update_blocks() {
 			                                  * adc_read(POT0) * ROW_SPEED_MULT;
 		curr_sprite->dx = block_speed;
 		// Wrap around the screen
-		int x = sprite_x(curr_sprite);
-		int y = sprite_y(curr_sprite);
+		int x = round(sprite_x(curr_sprite));
+		int y = round(sprite_y(curr_sprite));
 		if (x < -BLOCK_WIDTH) {
 			sprite_move_to(curr_sprite, screen_width(), y);
 		} else if (x > screen_width()) {
@@ -812,25 +821,96 @@ time=%s, player x=%0.1f, player y=%0.1f\n"), player.score, player.lives,
 
 /*
 setup_food
-	Set up food sprites and place them on screen
+	Set up Food sprites and place them on screen
 */
 void setup_food() {
 	char *sprite = load_rom_bitmap(food_sprite, 3);
 	for (int i = 0; i < NUM_FOOD; i++) {
-		food_array[i].curr_block = -1;
-		food_array[i].sprite = sprite_create(1, 1, FOOD_WIDTH, FOOD_HEIGHT, 
-		                                                                sprite);
-		food_array[i].sprite->is_visible = false;
+		food_t *food = &food_array[i];
+		food->curr_block = -1;
+		food->sprite = sprite_create(1, 1, FOOD_WIDTH, FOOD_HEIGHT, sprite);
+		food->sprite->is_visible = false;
 	}
 }
 
 /*
 update_food
-	Draws and does other things to food sprites
+	Draws and does other things to Food sprites
 */
 void update_food() {
-	
+	food_place();
+	for (int i = 0; i < NUM_FOOD; i++) {
+		food_t *food = &food_array[i];
+		if (!food->sprite->is_visible) return;
+		food->sprite->dx = sprite_dx(block_array[food->curr_block].sprite);
+		food_block_wrap(food);
+		sprite_step(food->sprite);
+		sprite_draw(food->sprite);
+	}
 }
+
+/*
+food_block_wrap
+	Makes Food match motion of the block underneath
+*/
+void food_block_wrap(food_t *food) {
+	if (food->curr_block < 0) {
+		food->curr_block = get_current_block(food->sprite);
+		if (food->curr_block < 0) return;
+	}
+	
+	int x = round(sprite_x(food->sprite));
+	int y = round(sprite_y(food->sprite));
+	if (x < -BLOCK_WIDTH+food->x_offset) {
+		sprite_move_to(food->sprite, screen_width()+food->x_offset, y);
+	} else if (x > screen_width()) {
+		sprite_move_to(food->sprite, -BLOCK_WIDTH+food->x_offset, y);
+	}
+}
+
+/*
+food_place
+	Places a Food at the player location if SWD and there's any Food left
+*/
+void food_place() {
+	if (!read_switch(SWD) || player.curr_block < 0) return;
+	int i = food_search();
+	if (i < 0) return;
+	int px = round(sprite_x(player.sprite));
+	int py = round(sprite_y(player.sprite));
+	sprite_move_to(food_array[i].sprite, px+3, py+PLAYER_HEIGHT-3);
+	food_array[i].curr_block = get_current_block(food_array[i].sprite);
+	food_array[i].x_offset = px-block_array[food_array[i].curr_block].sprite->x;
+	food_array[i].sprite->is_visible = true;
+}
+
+/*
+food_search
+	Finds the index of first available Food in the array, or -1 if none
+*/
+int food_search() {
+	for (int i = 0; i < NUM_FOOD; i++) {
+		if (!food_array[i].sprite->is_visible) {
+			return i;
+		}
+	}
+	return -1;
+}
+
+/*
+food_inventory
+	Count of number of Food in inventory
+*/
+int food_inventory() {
+	int count = 0;
+	for (int i = 0; i < NUM_FOOD; i++) {
+		if (!food_array[i].sprite->is_visible) {
+			count++;
+		}
+	}
+	return count;
+}
+
 
 /* ========================================================================== */
 /*  Collision                                                                 */
