@@ -61,6 +61,10 @@ CAB202 project, Semester 2 2018
 #define COL_WIDTH 15
 #define ROW_SPEED_MULT 0.002
 
+#define NUM_FOOD 5
+#define FOOD_WIDTH 3
+#define FOOD_HEIGHT 3
+
 #define BIT(x) (1 << (x))
 #define DB_MASK 0b00000111
 #define OVERFLOW_TOP 1023
@@ -78,22 +82,13 @@ enum leds {LED0, LED1};
 enum pots {POT0, POT1};
 
 // Types
-/*
-block_t
-	Struct for containing data about a block.
-*/
 typedef struct block_t {
 	sprite_id sprite;    // The sprite object for this block
 	int row;             // The row number for this block, starting from 0
 	int column;          // The column number for this block, starting from 0
 	bool safe;           // True if safe '=', false if forbidden 'X'
-	bool out_of_bounds;  // True if the block is out of bounds
 } block_t;
-/*
 
-player_t
-	Struct for containing data about the player.
-*/
 typedef struct player_t {
 	sprite_id sprite;     // The sprite object for the player
 	int lives;            // Current number of lives
@@ -101,22 +96,24 @@ typedef struct player_t {
 	int prev_block;       // Index of the previous block the player stepped on
 	int curr_block;       // Index of block the player is on
 	int move_dir;         // Direction of movement for player from -1 to 1
-	double resid_speed;    // Residual speed from previous block standing
+	double resid_speed;   // Residual speed from previous block standing
 } player_t;
 
-/*
-treasure_t
-	Struct for containing data about the treasure.
-*/
 typedef struct treasure_t {
 	sprite_id sprite;  // The sprite object for the treasure
 	bool moving;       // If this treasure is moving or not
 } treasure_t;
 
+typedef struct food_t {
+	sprite_id sprite;  // The sprite object for the food
+	int curr_block;    // Index of block the food is on
+} food_t;
+
 // Global variables
-player_t player;          // Player struct
-treasure_t treasure;       // Treasure object
+player_t player;                  // Player struct
+treasure_t treasure;              // Treasure struct
 block_t block_array[MAX_BLOCKS];  // Block struct array
+food_t food_array[NUM_FOOD];      // Food struct array
 
 int num_rows;
 int num_cols;
@@ -159,6 +156,11 @@ const char PROGMEM treasure_sprite[] = {
 	0b10110000, 0b00000000,
 	0b11000000, 0b00000000
 };
+const char PROGMEM food_sprite[] = {
+	0b11100000,
+	0b10100000,
+	0b11100000
+};
 const char PROGMEM zombie_sprite[] = {
 	0b11110111, 0b10000000,
 	0b11111111, 0b10000000,
@@ -185,6 +187,7 @@ void intro_screen();
 void pause_screen();
 void game_over_screen(bool *game_running);
 void end_screen();
+void screen_fade(int dir);
 
 // Player
 void setup_player();
@@ -212,6 +215,10 @@ void update_blocks();
 void setup_treasure();
 void update_treasure();
 void treasure_collect();
+
+// Food
+void setup_food();
+void update_food();
 
 // Collision
 bool bounding_box_collision (sprite_id s1, sprite_id s2);
@@ -310,7 +317,6 @@ void reset() {
 	show_screen();
 	usb_serial_sendf(F("Game started. player x=%0.1f, player y=%0.1f\n"),
 	                          sprite_x(player.sprite), sprite_y(player.sprite));
-	usb_serial_sendf("%d", LCD_DEFAULT_CONTRAST);
 }
 
 /*
@@ -403,6 +409,25 @@ void end_screen() {
 	clear_screen();
 	draw_centref(-8, F(STUDENT_NUMBER));
 	show_screen();
+}
+
+/*
+screen_fade()
+	Fades screen backlight and contrast in and out 
+*/
+void screen_fade(int dir) {
+	int backlight_step = (DAC_MAX+1) / 16;
+	int contrast_step = (LCD_DEFAULT_CONTRAST+1) / 16;
+	int i1, i2;
+	if (dir > 0) {i1 =   0; i2 = 15;}
+	else         {i1 = -15; i2 =  0;}
+	LCD_CMD(lcd_set_function, lcd_instr_extended);
+	for (int i = i1; i <= i2; i++) {
+		set_backlight(backlight_step * i * dir);
+		LCD_CMD(lcd_set_contrast, contrast_step * i * dir);
+		_delay_ms(10);
+	}
+	LCD_CMD(lcd_set_function, lcd_instr_basic);
 }
 
 /* ========================================================================== */
@@ -499,7 +524,7 @@ void player_block_collision() {
 	int b = check_block_collision(player.sprite);
 	usb_serial_sendf(F("Player collided with block %d\n"), b);
 	if (b < 0) return;  // Exit if no collision
-	else if (!block_array[b].safe) player_die();  // Die if block is forbidden
+	else if (!block_array[b].safe) player_die("forbidden block");
 	else if (sprite_y(player.sprite) == sprite_y(block_array[b].sprite)+1);
 	else {  // Set the horizontal motion to 0
 		//player.sprite->x -= player.sprite->dx;
@@ -514,7 +539,7 @@ player_block_forbidden
 void player_block_forbidden() {
 	if (player.curr_block < 0) return;
 	if (!block_array[player.curr_block].safe) {
-		player_die();
+		player_die("forbidden block");
 	}
 }
 
@@ -555,29 +580,22 @@ void player_control() {
 /*
 player_die
 	Animates the player dying and then resets the player position
+Parameters:
+	char *death_reason    Text reason for death to be send over USB serial
 */
-void player_die() {
+void player_die(char *death_reason) {
 	player.lives--;
-	LCD_CMD(lcd_set_function, lcd_instr_extended);
-	// Fade out
-	int backlight_step = (DAC_MAX+1) / 16;
-	int contrast_step = (LCD_DEFAULT_CONTRAST+1) / 16;
-	for (int i = 15; i >= 0; i--) {
-		set_backlight(i * backlight_step);
-		LCD_CMD(lcd_set_contrast, i * contrast_step);
-		_delay_ms(10);
-	}
+	
+	char time_string[10];
+	get_printable_time(time_string);
+	usb_serial_sendf("Player died due to %s, lives=%d, score=%d, time=%s\n",
+		death_reason, player.lives, player.score, time_string);
+	
+	screen_fade(-1);
 	setup_player();
 	process();
-	// Fade in
-	for (int i = 1; i <= 15; i++) {
-		set_backlight(i * backlight_step);
-		LCD_CMD(lcd_set_contrast, i * contrast_step);
-		_delay_ms(10);
-	}
+	screen_fade(1);
 	set_backlight(DAC_MAX);
-	LCD_CMD(lcd_set_function, lcd_instr_basic);
-	return;
 }
 
 /*
@@ -607,7 +625,7 @@ void player_boundaries() {
 	int pb = pt + ph;
 	// Check collision with sides of screen
 	if (pl < 1 || pt < 1 || pb > screen_height() || pr > screen_width()) {
-		player_die();
+		player_die("boundary collision");
 	}
 }
 
@@ -741,8 +759,7 @@ setup_treasure
 	Sets up treasure location and velocity
 */
 void setup_treasure() {
-	char* sprite = load_rom_bitmap(treasure_sprite, 
-	                                            TREASURE_WIDTH*TREASURE_HEIGHT);
+	char* sprite = load_rom_bitmap(treasure_sprite, 16);
 	treasure.sprite = sprite_create(1, screen_height()-TREASURE_HEIGHT-3,
 		                               TREASURE_WIDTH, TREASURE_HEIGHT, sprite);
 	sprite_turn_to(treasure.sprite, TREASURE_SPEED, 0);
@@ -784,9 +801,35 @@ void treasure_collect() {
 		char time_string[10];
 		get_printable_time(time_string);
 		usb_serial_sendf(F("Player collided with treasure. score=%d, lives=%d, \
-game time=%s, player x=%0.1f, player y=%0.1f\n"), player.score, player.lives,
+time=%s, player x=%0.1f, player y=%0.1f\n"), player.score, player.lives,
 			time_string, sprite_x(player.sprite), sprite_y(player.sprite));
 	}
+}
+
+/* ========================================================================== */
+/*  Food                                                                      */
+/* ========================================================================== */
+
+/*
+setup_food
+	Set up food sprites and place them on screen
+*/
+void setup_food() {
+	char *sprite = load_rom_bitmap(food_sprite, 3);
+	for (int i = 0; i < NUM_FOOD; i++) {
+		food_array[i].curr_block = -1;
+		food_array[i].sprite = sprite_create(1, 1, FOOD_WIDTH, FOOD_HEIGHT, 
+		                                                                sprite);
+		food_array[i].sprite->is_visible = false;
+	}
+}
+
+/*
+update_food
+	Draws and does other things to food sprites
+*/
+void update_food() {
+	
 }
 
 /* ========================================================================== */
@@ -955,7 +998,6 @@ ISR (TIMER3_OVF_vect) {
 	overflow_counter++;
 }
 
-
 /* ========================================================================== */
 /*  Input/output                                                              */
 /* ========================================================================== */
@@ -1084,7 +1126,6 @@ void update_usb_serial() {
 		case 't': set_switch(SW3);
 		case 's': set_switch(SWD);
 		case 'p': set_switch(SWC);
-		case 'q': player_die();
 	}
 }
 

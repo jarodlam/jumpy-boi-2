@@ -54,7 +54,7 @@
 7 & Treasure & Fully implemented \\ \midrule
 8 & Basic game mechanics & Partially implemented \\ \midrule
 9 & Block movement & Fully implemented \\ \midrule
-10 & Player velocity & Partially implemented \\ \midrule
+10 & Player velocity & Fully implemented \\ \midrule
 11 & Player jumping & Fully implemented \\ \midrule
 12 & Player inventory & Not implemented \\ \midrule
 13 & Zombies & Not implemented \\ \midrule
@@ -126,7 +126,7 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \test{On death, the player respawns on the `starting block'}{Kill the player using any method imaginable while having 2 lives or more.}{The player dies and respawns on the stationary `starting block'.}{As expected.}
 \test{When the player loses all their lives, the game over screen is displayed which displays a game over message, total score, and game play time.}{Kill the player repeatedly by any means until all lives are gone.}{The game over screen is displayed showing a message, total score, and game play time in mm:ss format.}{As expected.}
 \test{The game over screen allows the player to restart by pressing SW3 and score, lives, time, and player position all reset.}{Press SW3 on the game over screen.}{The game screen disappears and score, lives, time, and player position all reset, and the game restarts.}{Partially implemented.}
-\test{The game over screen allows the player to end the game by pressing SW2 which clears everything and just displays student number on the screen.}{Press SW2 on the game over screen.}{The screen is cleared and the student number is displayed on the screen.}{Not implemented.}
+\test{The game over screen allows the player to end the game by pressing SW2 which clears everything and just displays student number on the screen.}{Press SW2 on the game over screen.}{The screen is cleared and the student number is displayed on the screen.}{As expected.}
 \end{testplan}
 
 \clearpage
@@ -147,8 +147,8 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \test{If the player is moving horizontally before leaving the support of a block, then the player must continue to move horizontally at the same speed while accelerating downwards, so that a parabolic flight path will be observed.}{Move the player off a moving safe block.}{The player will keep its horizontal velocity but accelerate downwards according to gravity.}{As expected.}
 \test{If the player is moving without support of a block and the player lands on a safe block, it will then immediately begin to move horizontally in the same speed and direction as the block, and all vertical motion will cease.}{Move the player off a moving safe block so that it falls and lands on another moving safe block.}{When the player lands, it will immediately begin to move horizontally in the same speed and direction as the block, and all vertical motion will cease.}{As expected.}
 \test{If the player is moving without support of a block, and its Sprite collides with the end of a safe block (from the side), then its horizontal motion becomes zero, and it continues to accelerate downward.}{Make the player jump off a block and collide with the end of another safe block from the side.}{The player's horizontal motion becomes zero and it continues to accelerate downward.}{As expected.}
-\test{All other collisions between the player and safe blocks are treated in a manner consistent with the combined motion.}{From a lower row of blocks, make the player jump into a safe block on the row above.}{The player is given an upward velocity passes upward through the block above, keeping the horizontal velocity of its previous block and accelerating vertically downwards.}{Not implemented.}
-\test{Any collision with an unsafe block results in death.}{Guide the player into an unsafe block by standing or jumping into it.}{The player dies and a life is deducted.}{Not implemented.}
+\test{All other collisions between the player and safe blocks are treated in a manner consistent with the combined motion.}{From a lower row of blocks, make the player jump into a safe block on the row above.}{The player is given an upward velocity passes upward through the block above, keeping the horizontal velocity of its previous block and accelerating vertically downwards.}{As expected.}
+\test{Any collision with an unsafe block results in death.}{Guide the player into an unsafe block by standing or jumping into it.}{The player dies and a life is deducted.}{As expected.}
 \end{testplan}
 
 \begin{testplan}{Player jumping}
