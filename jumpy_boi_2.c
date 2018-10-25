@@ -159,6 +159,16 @@ const char PROGMEM treasure_sprite[] = {
 	0b10110000, 0b00000000,
 	0b11000000, 0b00000000
 };
+const char PROGMEM zombie_sprite[] = {
+	0b11110111, 0b10000000,
+	0b11111111, 0b10000000,
+	0b01111111, 0b00000000,
+	0b11011101, 0b10000000,
+	0b11011101, 0b10000000,
+	0b11110111, 0b10000000,
+	0b01111111, 0b00000000,
+	0b00111110, 0b00000000 
+};
 
 /* ========================================================================== */
 /*  Function declarations                                                     */
@@ -173,9 +183,12 @@ void process();
 // User interface
 void intro_screen();
 void pause_screen();
+void game_over_screen(bool *game_running);
+void end_screen();
 
 // Player
 void setup_player();
+void reset_player();
 void update_player();
 void player_physics();
 void player_standing();
@@ -266,8 +279,9 @@ int main(void) {
 			show_screen();
 			_delay_ms(DELAY);
 		}
-		//game_over(&game_running);
+		game_over_screen(&game_running);
 	}
+	end_screen();
 }
 
 /*
@@ -295,7 +309,8 @@ void reset() {
 	clear_screen();
 	show_screen();
 	usb_serial_sendf(F("Game started. player x=%0.1f, player y=%0.1f\n"),
-		sprite_x(player.sprite), sprite_y(player.sprite));
+	                          sprite_x(player.sprite), sprite_y(player.sprite));
+	usb_serial_sendf("%d", LCD_DEFAULT_CONTRAST);
 }
 
 /*
@@ -344,9 +359,9 @@ void pause_screen() {
 	get_printable_time(time_string);
 	
 	clear_screen();
-	draw_centref(-16, F("PAUSED"));
-	draw_centref(-8, F("Lives: %d"), player.lives);
-	draw_centref(0, F("Score: %d"), player.score);
+	draw_centref(-16, "PAUSED");
+	draw_centref(-8, "Lives: %d", player.lives);
+	draw_centref(0, "Score: %d", player.score);
 	draw_centref(8, time_string);
 	show_screen();
 	
@@ -361,7 +376,33 @@ game_over_screen
 	Game over screen when the player loses all lives
 */
 void game_over_screen(bool *game_running) {
-	
+	char time_string[10];
+	get_printable_time(time_string);
+	clear_screen();
+	draw_centref(-16, F("YOU DIED :("));
+	draw_centref(-8, F("Total score: %d"), player.score);
+	draw_centref(0, F("Play time: %s"), time_string);
+	draw_centref(8, F("SW3 to reset"));
+	draw_centref(16, F("SW2 to end"));
+	show_screen();
+	while (1) {
+		if (read_switch(SW2)) {
+			*game_running = false;
+			return;
+		} else if (read_switch(SW3)) {
+			return;
+		}
+	}
+}
+
+/*
+end_screen
+	Just displays the student number on screen.
+*/
+void end_screen() {
+	clear_screen();
+	draw_centref(-8, F(STUDENT_NUMBER));
+	show_screen();
 }
 
 /* ========================================================================== */
@@ -378,7 +419,7 @@ void setup_player() {
 	player.move_dir = 0;
 	player.resid_speed = 0;
 	// Create the player sprite
-	char *sprite = load_rom_bitmap(player_sprite, PLAYER_WIDTH*PLAYER_HEIGHT);
+	char *sprite = load_rom_bitmap(player_sprite, 16);
 	player.sprite = sprite_create(PLAYER_START_X, PLAYER_START_Y,
 	                                       PLAYER_WIDTH, PLAYER_HEIGHT, sprite);
 }
@@ -524,7 +565,7 @@ void player_die() {
 	for (int i = 15; i >= 0; i--) {
 		set_backlight(i * backlight_step);
 		LCD_CMD(lcd_set_contrast, i * contrast_step);
-		_delay_ms(50);
+		_delay_ms(10);
 	}
 	setup_player();
 	process();
@@ -532,10 +573,11 @@ void player_die() {
 	for (int i = 1; i <= 15; i++) {
 		set_backlight(i * backlight_step);
 		LCD_CMD(lcd_set_contrast, i * contrast_step);
-		_delay_ms(50);
+		_delay_ms(10);
 	}
 	set_backlight(DAC_MAX);
 	LCD_CMD(lcd_set_function, lcd_instr_basic);
+	return;
 }
 
 /*
@@ -612,7 +654,7 @@ block_t *create_starting_block() {
 	block_array[0].row = 0;
 	block_array[0].column = 0;
 	block_array[0].safe = true;
-	char *sprite = load_rom_bitmap(safe_sprite, BLOCK_WIDTH*BLOCK_HEIGHT);
+	char *sprite = load_rom_bitmap(safe_sprite, 4);
 	block_array[0].sprite = sprite_create(0, ROW_HEIGHT-2,
 		                                     BLOCK_WIDTH, BLOCK_HEIGHT, sprite);
 	return &block_array[0];
@@ -627,8 +669,8 @@ block_t *create_block(int curr_row, int curr_col, bool safe, int curr_block) {
 	int x = curr_col * COL_WIDTH;
 	int y = (curr_row+1) * ROW_HEIGHT - 2;
 	uint8_t *sprite = safe
-		          ? load_rom_bitmap(safe_sprite, BLOCK_WIDTH*BLOCK_HEIGHT)
-	              : load_rom_bitmap(forbidden_sprite, BLOCK_WIDTH*BLOCK_HEIGHT);
+		          ? load_rom_bitmap(safe_sprite, 4)
+	              : load_rom_bitmap(forbidden_sprite, 4);
 	// Apply these parameters to the block in block_array
 	block_array[curr_block].row = curr_row;
 	block_array[curr_block].column = curr_col;
