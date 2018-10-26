@@ -68,6 +68,7 @@ CAB202 project, Semester 2 2018
 #define NUM_ZOMBIES 5
 #define ZOMBIE_WIDTH 9
 #define ZOMBIE_HEIGHT 8
+#define ZOMBIE_SPEED 1
 
 #define BIT(x) (1 << (x))
 #define DB_MASK 0b00000111
@@ -116,7 +117,10 @@ typedef struct food_t {
 
 typedef struct zombie_t {
 	sprite_id sprite;  // The sprite object for the zombie
+	int prev_block;    // Index of the previous block the zombie stepped on
 	int curr_block;    // Index of block the zombie is on
+	int move_dir;      // Direction of movement for zombie from -1 to 1
+	int x_offset;      // x offset of zombie from block
 } zombie_t;
 
 // Global variables
@@ -232,7 +236,7 @@ void treasure_collect();
 // Food
 void food_setup();
 void food_update();
-void food_block_wrap(food_t *f);
+void food_wrap(food_t *f);
 void food_place();
 int food_search();
 int food_inventory();
@@ -241,8 +245,11 @@ int food_inventory();
 void zombie_setup();
 void zombie_update();
 void zombie_spawn();
-void zombie_physics();
+void zombie_physics(zombie_t *z);
 int zombie_count();
+void zombie_bottom(zombie_t *b);
+void zombie_block_motion(zombie_t *z);
+void zombie_wrap(zombie_t *z);
 
 // Collision
 bool collision_box (sprite_id s1, sprite_id s2);
@@ -401,7 +408,7 @@ void screen_pause() {
 	draw_centref(-16, "Lives: %d", player.lives);
 	draw_centref(-8, "Score: %d", player.score);
 	draw_centref(0, "Time: %s", time_string);
-	draw_centref(8, "Zombies: ");
+	draw_centref(8, "Zombies: %d", zombie_count());
 	draw_centref(16, "Food: %d", food_inventory());
 	show_screen();
 	
@@ -419,17 +426,17 @@ void screen_game_over(bool *game_running) {
 	char time_string[10];
 	time_printable(time_string);
 	clear_screen();
-	draw_centref(-24, F("YOU DIED :("));
-	draw_centref(-16, F("Total score: %d"), player.score);
-	draw_centref(-8, F("Play time: %s"), time_string);
-	draw_centref(0, F("SW3 to reset"));
-	draw_centref(8, F("SW2 to end"));
+	draw_centref(-24, "YOU DIED :(");
+	draw_centref(-16, "Total score: %d", player.score);
+	draw_centref(-8, "Play time: %s", time_string);
+	draw_centref(0, "SW3 to reset");
+	draw_centref(8, "SW2 to end");
 	show_screen();
 	while (1) {
-		if (switch_read(SW2)) {
+		if (switch_read(SW2) || usb_serial_getchar() == 'q') {
 			*game_running = false;
 			return;
-		} else if (switch_read(SW3)) {
+		} else if (switch_read(SW3) || usb_serial_getchar() == 'r') {
 			return;
 		}
 	}
@@ -556,7 +563,6 @@ void player_block_collision() {
 	if (player.curr_block >= 0) return;
 	// Check for a collided block
 	int b = collision_block(player.sprite);
-	usb_serial_sendf(F("Player collided with block %d\n"), b);
 	if (b < 0) return;  // Exit if no collision
 	else if (!block_array[b].safe) player_die("forbidden block");
 	else if (sprite_y(player.sprite) == sprite_y(block_array[b].sprite)+1);
@@ -619,10 +625,9 @@ Parameters:
 */
 void player_die(char *death_reason) {
 	player.lives--;
-	
 	char time_string[10];
 	time_printable(time_string);
-	usb_serial_sendf("Player died due to %s, lives=%d, score=%d, time=%s\n",
+	usb_serial_sendf("Player died due to %s. lives=%d, score=%d, time=%s\n",
 		death_reason, player.lives, player.score, time_string);
 	
 	screen_fade(-1);
@@ -630,6 +635,9 @@ void player_die(char *death_reason) {
 	process();
 	screen_fade(1);
 	backlight_set(DAC_MAX);
+	
+	usb_serial_sendf("Player respawned. player x=%d, player y=%d\n",
+		PLAYER_START_X, PLAYER_START_Y);
 }
 
 /*
@@ -868,17 +876,17 @@ void food_update() {
 		food_t *f = &food_array[i];
 		if (!f->sprite->is_visible) return;
 		f->sprite->dx = sprite_dx(block_array[f->curr_block].sprite);
-		food_block_wrap(f);
+		food_wrap(f);
 		sprite_step(f->sprite);
 		sprite_draw(f->sprite);
 	}
 }
 
 /*
-food_block_wrap
+food_wrap
 	Makes Food match motion of the block underneath
 */
-void food_block_wrap(food_t *f) {
+void food_wrap(food_t *f) {
 	if (f->curr_block < 0) {
 		f->curr_block = collision_on_block(f->sprite);
 		if (f->curr_block < 0) return;
@@ -963,10 +971,13 @@ void zombie_update() {
 	zombie_spawn();
 	for (int i = 0; i < NUM_ZOMBIES; i++) {
 		zombie_t *z = &zombie_array[i];
-		if (!z->sprite->is_visible) return;
+		if (!z->sprite->is_visible) continue;
 		
 		z->curr_block = collision_on_block(z->sprite);
-		zombie_physics();
+		zombie_physics(z);
+		zombie_bottom(z);
+		zombie_block_motion(z);
+		zombie_wrap(z);
 		
 		sprite_step(z->sprite);
 		sprite_draw(z->sprite);
@@ -979,9 +990,16 @@ zombie_spawn
 */
 void zombie_spawn() {
 	if (time_elapsed() - zombie_reset_time < 3 || zombie_count() > 0) return;
+	
+	char time_string[10];
+	time_printable(time_string);
+	usb_serial_sendf("Zombies spawning. zombies=5, time=%s, lives=%d, score=%d",
+		time_string, player.lives, player.score);
+	
 	for (int i = 0; i < NUM_ZOMBIES; i++) {
 		zombie_t *z = &zombie_array[i];
-		sprite_move_to(z->sprite, zombie_start_pos[i], 1);
+		sprite_move_to(z->sprite, zombie_start_pos[i], -ZOMBIE_HEIGHT);
+		sprite_turn_to(z->sprite, 0, 0);
 		z->sprite->is_visible = true;
 	}
 }
@@ -990,19 +1008,19 @@ void zombie_spawn() {
 zombie_physics
 	Applies gravity to Zombies
 */
-void zombie_physics(zombie_t z) {
-	double dx = sprite_dx(z.sprite);
-	double dy = sprite_dy(z.sprite);
-	if (z.curr_block >= 0) {
+void zombie_physics(zombie_t *z) {
+	double dx = sprite_dx(z->sprite);
+	double dy = sprite_dy(z->sprite);
+	if (z->curr_block >= 0) {
 		dy = 0;
 	} else {
 		dy += ACCEL_GRAV;
 	}
-	sprite_turn_to(z.sprite, dx, dy);
+	sprite_turn_to(z->sprite, dx, dy);
 }
 
 /*
-food_inventory
+zombie_count
 	Count of number of Zombies on screen
 */
 int zombie_count() {
@@ -1013,6 +1031,55 @@ int zombie_count() {
 		}
 	}
 	return count;
+}
+
+/*
+zombie_bottom
+	Makes zombie disappear if it falls off the screen
+*/
+void zombie_bottom(zombie_t *z) {
+	if (!z->sprite->is_visible || z->sprite->y < screen_height()) return;
+	z->sprite->is_visible = false;
+}
+
+/*
+zombie_landing
+	Handles the zombie landing on blocks
+*/
+void zombie_landing(zombie_t *z) {
+	// If just landed on a block, set the zombies's move speed to random dir
+	if (z->prev_block < 0 && z->curr_block >= 0) {
+		z->move_dir = ((double) rand() / (RAND_MAX) > 0.5) * 2 - 1;
+		z->x_offset = z->sprite->x - block_array[z->curr_block].sprite->x;
+	}
+}
+
+/*
+zombie_block_motion
+	Makes zombie motion match the block underneath
+*/
+void zombie_block_motion(zombie_t *z) {
+	if (z->curr_block < 0) return;
+	z->sprite->dx = block_array[z->curr_block].sprite->dx;
+}
+
+/*
+zombie_wrap
+	Wraps zombie around screen
+*/
+void zombie_wrap(zombie_t *z) {
+	if (z->curr_block < 0) {
+		z->curr_block = collision_on_block(z->sprite);
+		if (z->curr_block < 0) return;
+	}
+	
+	int x = round(sprite_x(z->sprite));
+	int y = round(sprite_y(z->sprite));
+	if (x < -BLOCK_WIDTH+z->x_offset) {
+		sprite_move_to(z->sprite, screen_width()+z->x_offset, y);
+	} else if (x > screen_width()) {
+		sprite_move_to(z->sprite, -BLOCK_WIDTH+z->x_offset, y);
+	}
 }
 
 /* ========================================================================== */
@@ -1028,7 +1095,7 @@ Parameters:
 Returns:
 	bool          True if there is a collision
 */
-bool collision_box (sprite_id s1, sprite_id s2) {
+bool collision_box(sprite_id s1, sprite_id s2) {
 	// Get some parameters
 	int s1w = s1->width; int s1h = s1->height;
 	int s2w = s2->width; int s2h = s2->height;
@@ -1044,58 +1111,6 @@ bool collision_box (sprite_id s1, sprite_id s2) {
 		return 0;    // No collision
 	}
 }
-
-/*
-pixel_level_collsion
-	Checks whether two sprites s1 and s2 collide at pixel level
-Parameters:
-	sprite_id s1    First sprite to be compared
-	sprite_id s2    Second sprite to be compared
-Returns:
-	bool          True if there is a collision
-*/
-/*bool pixel_level_collision (sprite_id s1, sprite_id s2 )
-{
-    // Generate x and y arrays
-	int s1size = sprite_width(s1) * sprite_height(s1);
-    int s2size = sprite_width(s2) * sprite_height(s2);
-	int s1x[s1size], s1y[s1size], s2x[s2size], s2y[s2size];
-	// Populate the arrays
-	int ctr1 = get_coord_list(s1, &s1x, &s1y, s1size);
-	int ctr2 = get_coord_list(s2, &s2x, &s2y, s2size);
-	// Compare the two
-	for (int i = 0; i < ctr1; i++) {
-		for (int j = 0; j < ctr2; j++) {
-			if (s1x[i] == s2x[j] && s1y[i] == s2y[j]) {
-				return true;
-			}
-		}
-	}
-	return false;
-}*/
-
-/*
-get_coord_list
-	Supporting function for pixel_level_collision
-*/
-/*int get_coord_list(sprite_id s, int size, int (*sx)[size], int (*sy)[size]) {
-	int ctr = 0;
-	int width_bits = 8 * ceil(sprite_width(s) / 8);
-	for (int y = 0; y < sprite_height(s); y++) {
-		for (int x = 0; x < sprite_width(s); x++) {
-			// Find the bit and byte index for the current x and y pos
-			int pixel_byte = (y * width_bits + x) / 8;
-			int pixel_bit  = (y * width_bits + x) % 8;
-			// Check if they match, and add to the arrays if they do
-			if (BIT_IS_SET(s->bitmap[pixel_byte], pixel_bit)) {
-				*sx[ctr] = round(x + sprite_x(s));
-				*sy[ctr] = round(y + sprite_y(s));
-				ctr++;
-			}
-		}
-	}
-	return ctr;
-}*/
 
 /*
 collision_on_block

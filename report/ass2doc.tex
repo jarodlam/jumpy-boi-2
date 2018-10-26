@@ -57,8 +57,8 @@
 10 & Player velocity & Fully implemented \\ \midrule
 11 & Player jumping & Fully implemented \\ \midrule
 12 & Player inventory & Fully implemented \\ \midrule
-13 & Zombies & Not implemented \\ \midrule
-14 & Pause screen advanced & Partially implemented \\ \midrule
+13 & Zombies & Partially implemented \\ \midrule
+14 & Pause screen advanced & Fully implemented \\ \midrule
 15 & ADC for block speed & Fully implemented \\ \midrule
 16 & Switch debouncing & Fully implemented \\ \midrule
 17 & LED warning & Not implemented \\ \midrule
@@ -172,8 +172,8 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \end{testplan}
 
 \begin{testplan}{Zombies}
-\test{Five (5) Zombies appear from the top of the screen, and fall straight down without overlapping each other, after the program has been running for approximately 3 seconds.}{Start the game and wait approximately 3 seconds.}{Five Zombies appear from the top of the screen and fall straight down without overlapping each other.}{Not implemented.}
-\test{Zombies stop falling when they land on any block.}{Start the game and observe the Zombie motion.}{The Zombies stop falling when they land on a block.}{Not implemented.}
+\test{Five (5) Zombies appear from the top of the screen, and fall straight down without overlapping each other, after the program has been running for approximately 3 seconds.}{Start the game and wait approximately 3 seconds.}{Five Zombies appear from the top of the screen and fall straight down without overlapping each other.}{As expected.}
+\test{Zombies stop falling when they land on any block.}{Start the game and observe the Zombie motion.}{The Zombies stop falling when they land on a block.}{As expected.}
 \test{If a Zombie falls all the way to the bottom of the screen, it passes from view and does not reappear immediately. The player doesn't get any points for this.}{Start the game and wait for a Zombie to fall off the bottom of the screen. Check the score on the pause screen.}{When the Zombie falls off the bottom of the screen, it passes from view and does not reappear immediately. The player's score does not change.}{Not implemented.}
 \test{After landing on a block, Zombies prowl left and right along the blocks at fixed constant speed relative to the blocks.}{Start the game and observe the Zombie motion.}{Zombies will move faster when moving with the direction of the blocks, and slower when moving against the direction of the blocks.}{Not implemented.}
 \test{Zombies can cross over narrow gaps, and whenever a Zombie reaches a gap that it cannot cross, it reverses and moves in the opposite direction.}{Start the game and observe the Zombie motion.}{Zombies move between blocks with narrow gaps, and reverses and moves in the opposite direction when it encounters a wider gap.}{Not implemented.}
@@ -186,8 +186,8 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \end{testplan}
 
 \begin{testplan}{Pause screen advanced}
-\test{The pause screen shows the number of Zombies on screen.}{Start the game and press joystick centre to view the pause screen.}{In addition to other statistics, the pause screen shows the current number of Zombies on screen.}{Not implemented.}
-\test{The pause screen shows the number of Food in inventory.}{Start the game and press joystick centre to view the pause screen.}{In addition to other statistics, the pause screen shows the current number of Food in inventory.}{Not implemented.}
+\test{The pause screen shows the number of Zombies on screen.}{Start the game and press joystick centre to view the pause screen.}{In addition to other statistics, the pause screen shows the current number of Zombies on screen.}{As expected.}
+\test{The pause screen shows the number of Food in inventory.}{Start the game and press joystick centre to view the pause screen.}{In addition to other statistics, the pause screen shows the current number of Food in inventory.}{As expected.}
 \end{testplan}
 
 \clearpage
@@ -214,10 +214,9 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 
 \begin{testplan}{Serial communication events}
 \test{When the game starts, the name of event, player x position, and player y position are sent over USB serial.}{Start the game by pressing SW2 while viewing the Teensy serial output from the computer.}{A serial message saying that the game has started, player x position, and player y position are received over USB serial.}{As expected.}
-\test{When the player dies, the name of event, reason for death, lives after death, score, and game time are sent over USB serial.}{Start the game by pressing SW2 and kill the player by any means, while viewing the Teensy serial output from the computer.}{A serial message saying that the player has died, reason for death, lives after death, score, and game time are received over USB serial.}{Not implemented.}
-\test{When the player respawns, the name of event, player x, and player y are sent over USB serial.}{Start the game by pressing SW2, kill the player by any means, and wait for it to respawn, while viewing the Teensy serial output from the computer.}{A serial message saying that the player has respawned, player x, and player y are received over USB serial.}{Not implemented.}
+\test{When the player dies, the name of event, reason for death, lives after death, score, and game time are sent over USB serial.}{Start the game by pressing SW2 and kill the player by any means, while viewing the Teensy serial output from the computer.}{A serial message saying that the player has died, reason for death, lives after death, score, and game time are received over USB serial.}{As expected.}
+\test{When the player respawns, the name of event, player x, and player y are sent over USB serial.}{Start the game by pressing SW2, kill the player by any means, and wait for it to respawn, while viewing the Teensy serial output from the computer.}{A serial message saying that the player has respawned, player x, and player y are received over USB serial.}{As expected.}
 \test{When the Zombies appear, the name of event, number of zombies, game time, player lives, and player score are sent over USB serial.}{Start the game by pressing SW2 and wait for the Zombies to appear, while viewing the Teensy serial output from the computer.}{A serial message saying that the Zombies have appeared, number of zombies, game time, player lives, and player score are received over USB serial.}{As expected.}
-\test{When the Zombies collide with Food, the name of event, number of zombies on screen after collision, number of Food in inventory after collision, and game time are sent over USB serial.}{Start the game by pressing SW2 while viewing the Teensy serial output from the computer.}{A serial message saying that the game has started, player x position, and player y position are received over USB serial.}{As expected.}
 \test{When the Zombies collide with Food, the name of event, number of zombies on screen after collision, number of Food in inventory after collision, and game time are sent over USB serial.}{Place a Food in the path of a Zombie and wait for the to collide, while viewing the Teensy serial output from the computer.}{A serial message saying that a Zombie has collided with Food, number of zombies on screen after collision, number of Food in inventory after collision, and game time are received over USB serial.}{As expected.}
 \test{When the player collides with the treasure, the name of event, score, lives, game time, and position of player after returning to the top row are sent over USB serial.}{Guide the player to collide with the treasure while avoiding Zombies and forbidden blocks, while viewing the Teensy serial output from the computer.}{A serial message saying that the player has collided with the treasure, score, lives, game time, and position of player are received over USB serial.}{As expected.}
 \test{When the pause button is pressed, the name of event, player lives, player score, game time, number of zombies on screen, number of Food in inventory are sent over USB serial.}{Start the game by pressing SW2 and pause the game by pressing SW3, while viewing the Teensy serial output from the computer.}{A serial message saying that the pause button was pressed, player lives, player score, game time, number of zombies on screen, number of Food in inventory are received over USB serial.}{As expected.}
@@ -228,12 +227,12 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \test{When `s' is sent from the intro screen, the game is started.}{Turn on the Teensy and send `s' over USB serial.}{The game is started.}{As expected.}
 \test{When `a' is sent while the game is running, the character moves left.}{Start the game and send `a' over USB serial.}{The character moves left according to normal player movement.}{As expected.}
 \test{When `d' is sent while the game is running, the character moves right.}{Start the game and send `d' over USB serial.}{The character moves right according to normal player movement.}{As expected.}
-\test{When `w' is sent while the game is running, the character jumps}{Start the game and send `w' over USB serial.}{The character jumps according to normal player movement.}{Not implemented.}
+\test{When `w' is sent while the game is running, the character jumps}{Start the game and send `w' over USB serial.}{The character jumps according to normal player movement.}{As expected.}
 \test{When `t' is sent while the game is running, the treasure starts and stops moving.}{Start the game and send `t' over USB serial twice with a pause in between when the treasure is visible and moving.}{The treasure motion stops then starts again.}{As expected.}
-\test{When `s' is sent while the game is running, Food is dropped where the player stands.}{Start the game and send `s' over USB serial while the player is on a safe block and has Food in inventory.}{A Food is dropped where the player stands.}{Not implemented.}
+\test{When `s' is sent while the game is running, Food is dropped where the player stands.}{Start the game and send `s' over USB serial while the player is on a safe block and has Food in inventory.}{A Food is dropped where the player stands.}{As expected.}
 \test{When `p' is sent while the game is running, the game is paused and game information is displayed.}{Start the game and send `p' over USB serial.}{The game is paused and game information is displayed.}{As expected.}
-\test{When `r' is sent after game over, the game is restarted.}{Kill the player by any means until the player has run out of lives and the game over screen is displayed, then send `r' over USB serial.}{The game is reset and restarts from the beginning.}{Not implemented.}
-\test{When `q' is sent after game over, the student number screen is displayed.}{Kill the player by any means until the player has run out of lives and the game over screen is displayed, then send `q' over USB serial.}{The screen clears and the student number screen is displayed.}{Not implemented.}
+\test{When `r' is sent after game over, the game is restarted.}{Kill the player by any means until the player has run out of lives and the game over screen is displayed, then send `r' over USB serial.}{The game is reset and restarts from the beginning.}{As expected.}
+\test{When `q' is sent after game over, the student number screen is displayed.}{Kill the player by any means until the player has run out of lives and the game over screen is displayed, then send `q' over USB serial.}{The screen clears and the student number screen is displayed.}{As expected.}
 \end{testplan}
 
 \clearpage
