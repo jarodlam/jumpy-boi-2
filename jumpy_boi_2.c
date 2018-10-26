@@ -148,15 +148,15 @@ volatile uint32_t timer3_overflow = 0;  // For tracking time
 /*  Sprites                                                                   */
 /* ========================================================================== */
 
-const char PROGMEM safe_sprite[] = {
+const unsigned char PROGMEM safe_sprite[] = {
 	0b11111111, 0b11000000,
 	0b11111111, 0b11000000
 };
-const char PROGMEM forbidden_sprite[] = {
+const unsigned char PROGMEM forbidden_sprite[] = {
 	0b10101010, 0b10000000,
 	0b01010101, 0b01000000
 };
-const char PROGMEM player_sprite[] = {
+const unsigned char PROGMEM player_sprite[] = {
 	0b11110111, 0b10000000,
 	0b11011101, 0b10000000,
 	0b01000001, 0b00000000,
@@ -166,7 +166,7 @@ const char PROGMEM player_sprite[] = {
 	0b01000001, 0b00000000,
 	0b00111110, 0b00000000 
 };
-const char PROGMEM treasure_sprite[] = {
+const unsigned char PROGMEM treasure_sprite[] = {
 	0b00000111, 0b10000000,
 	0b00001111, 0b10000000,
 	0b00010011, 0b10000000,
@@ -176,12 +176,12 @@ const char PROGMEM treasure_sprite[] = {
 	0b10110000, 0b00000000,
 	0b11000000, 0b00000000
 };
-const char PROGMEM food_sprite[] = {
+const unsigned char PROGMEM food_sprite[] = {
 	0b11100000,
 	0b10100000,
 	0b11100000
 };
-const char PROGMEM zombie_sprite[] = {
+const unsigned char PROGMEM zombie_sprite[] = {
 	0b11110111, 0b10000000,
 	0b11111111, 0b10000000,
 	0b01111111, 0b00000000,
@@ -264,6 +264,7 @@ void zombie_block_motion(zombie_t *z);
 void zombie_wrap(zombie_t *z);
 void zombie_motion(zombie_t *z);
 void zombie_food(zombie_t *z);
+void zombie_player(zombie_t *z);
 
 // Collision
 bool collision_box (sprite_id s1, sprite_id s2);
@@ -389,8 +390,8 @@ process (void)
 void process() {
 	clear_screen();
 	switch_update();
-	screen_pause();
 	usb_serial_update();
+	screen_pause();
 	player_update();
 	food_update();
 	zombie_update();
@@ -451,8 +452,14 @@ void screen_pause() {
 	draw_centref(16, "Food: %d", food_inventory());
 	show_screen();
 	
+	usb_serial_sendf("Pause button pressed. lives=%d, score=%d, time=%s, \
+zombies=%d, food=%d\n", player.lives, player.score, time_string, zombie_count(),
+	                                                          food_inventory());
 	_delay_ms(500);
-	while (!switch_curr[SWC]);   // Wait for joystick to be pressed
+	while (!switch_read(SWC)) {// Wait for joystick to be pressed
+		usb_serial_update();
+		switch_update();
+	}
 	_delay_ms(200);
 	timer3_overflow -= timer3_overflow - pause_overflow; // Subtract pause
 }
@@ -474,10 +481,10 @@ void screen_game_over(bool *game_running) {
 	show_screen();
 	while (1) {
 		switch_update();
-		if (switch_curr[SW2] || usb_serial_getchar() == 'q') {
+		if (switch_read(SW2) || usb_serial_getchar() == 'q') {
 			*game_running = false;
 			return;
-		} else if (switch_read_raw(SW3) || usb_serial_getchar() == 'r') {
+		} else if (switch_read(SW3) || usb_serial_getchar() == 'r') {
 			return;
 		}
 	}
@@ -759,8 +766,7 @@ void block_setup() {
 				if ((double) rand() / (RAND_MAX) < EMPTY_CHANCE) {continue;}
 				bool safe = curr_row==0 ? true
 			                   : block_safe(curr_col, num_cols, &safe_count);
-				block_t *created_block = block_create(curr_row, curr_col, 
-				                              safe, num_blocks, s_safe, s_forb);
+				block_create(curr_row,curr_col,safe,num_blocks,s_safe,s_forb);
 				num_blocks++;
 			}
 		}
@@ -1069,6 +1075,7 @@ void zombie_update() {
 		zombie_wrap(z);
 		zombie_motion(z);
 		zombie_food(z);
+		zombie_player(z);
 		
 		sprite_step(z->sprite);
 		sprite_draw(z->sprite);
@@ -1094,8 +1101,8 @@ void zombie_spawn() {
 	
 	char time_string[10];
 	time_printable(time_string);
-	usb_serial_sendf("Zombies spawning. zombies=5, time=%s, lives=%d, score=%d",
-		time_string, player.lives, player.score);
+	usb_serial_sendf("Zombies spawning. zombies=5, time=%s, lives=%d, \
+score=%d\n", time_string, player.lives, player.score);
 	
 	for (int i = 0; i < NUM_ZOMBIES; i++) {
 		zombie_t *z = &zombie_array[i];
@@ -1216,6 +1223,21 @@ void zombie_food(zombie_t *z) {
 	if (c >= 0) {
 		player.score += 10;
 		food_array[c].sprite->is_visible = false;
+		z->sprite->is_visible = false;
+		char time_string[10];
+		time_printable(time_string);
+		usb_serial_sendf("Zombie collided with Food. zombies=%d, inventory=%d, \
+time=%s\n", zombie_count(), food_inventory(), time_string);
+	}
+}
+
+/*
+zombie_player
+	Makes player die when they collide with Zombie
+*/
+void zombie_player(zombie_t *z) {
+	if (collision_box(z->sprite, player.sprite)) {
+		player_die("collision with Zombie");
 	}
 }
 
@@ -1349,7 +1371,7 @@ Timer 0
 ISR(TIMER0_OVF_vect) {
 	for (int i = 0; i <= 6; i++) {
 		state_count[i] = ((state_count[i]<<1) & DB_MASK) | switch_read_raw(i);
-		if (state_count[i] & DB_MASK == DB_MASK) {
+		if ((state_count[i] & DB_MASK) == DB_MASK) {
 			switch_curr[i] = true;
 		} else if (state_count[i] == 0b00000000){
 			switch_curr[i] = false;
@@ -1444,7 +1466,6 @@ void switch_set(int switch_id) {
 	if (switch_id > 6 || switch_id < 0) {
 		return;
 	} else {
-		state_count[switch_id] = DB_MASK;
 		switch_closed[switch_id] = true;
 	}
 }
@@ -1495,11 +1516,11 @@ led_flash
 	Controls flashing of LEDs
 */
 void led_flash() {
-    if (timer1_overflow / 2 % 2) {
+    if (timer1_overflow == 2) {
         led_set(1);
-        timer1_overflow = 0;
-    } else {
+    } else if (timer1_overflow >= 4) {
         led_set(0);
+        timer1_overflow = 0;
     }
 }
 
@@ -1535,13 +1556,14 @@ usb_serial_update
 void usb_serial_update() {
 	int16_t char_code = usb_serial_getchar();
 	if (char_code <= 0) return;
+	while (usb_serial_available()) usb_serial_getchar();
 	switch (char_code) {
-		case 'a': switch_set(SWL);
-		case 'd': switch_set(SWR);
-		case 'w': switch_set(SWU);
-		case 't': switch_set(SW3);
-		case 's': switch_set(SWD);
-		case 'p': switch_set(SWC);
+		case 'a': switch_set(SWL); return;
+		case 'd': switch_set(SWR); return;
+		case 'w': switch_set(SWU); return;
+		case 't': switch_set(SW3); return;
+		case 's': switch_set(SWD); return;
+		case 'p': switch_set(SWC); return;
 	}
 }
 

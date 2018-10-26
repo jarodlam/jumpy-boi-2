@@ -12,6 +12,7 @@ all:
 		./usb_serial/usb_serial.o \
 		./cab202_adc/cab202_adc.o \
 		-lcab202_teensy \
+		-Wall \
 		-Wl,-u,vfprintf \
 		-lprintf_flt \
 		-lm \
