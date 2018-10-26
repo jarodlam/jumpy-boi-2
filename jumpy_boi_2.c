@@ -131,6 +131,7 @@ int num_cols;
 int num_blocks;
 double block_speed;
 uint32_t zombie_reset_time;
+int zombie_start_pos[] = {18,28,38,48,58};
 
 volatile uint8_t state_count[7] = {0,0,0,0,0,0,0};
 volatile bool switch_closed[7] = {0,0,0,0,0,0,0};
@@ -239,7 +240,9 @@ int food_inventory();
 // Zombies
 void zombie_setup();
 void zombie_update();
+void zombie_spawn();
 void zombie_physics();
+int zombie_count();
 
 // Collision
 bool collision_box (sprite_id s1, sprite_id s2);
@@ -249,7 +252,7 @@ int collision_block(sprite_id s);
 int collision_on_block(sprite_id s);
 
 // Timers and interrupts
-void setup_timers();
+void timer_setup();
 
 // Switches
 void switch_setup();
@@ -325,7 +328,7 @@ void setup() {
 	adc_init();
 	switch_setup();
 	led_setup();
-	setup_timers();
+	timer_setup();
 	backlight_setup();
 	usb_serial_setup();
 	_delay_ms(500);
@@ -339,6 +342,7 @@ void reset() {
 	player_setup();
 	treasure_setup();
 	food_setup();
+	zombie_setup();
 	clear_screen();
 	show_screen();
 	usb_serial_sendf(F("Game started. player x=%0.1f, player y=%0.1f\n"),
@@ -356,6 +360,7 @@ void process() {
 	usb_serial_update();
 	player_update();
 	food_update();
+	zombie_update();
 	block_update();
 	treasure_update();
 	show_screen();
@@ -955,6 +960,7 @@ zombie_update
 	Draws and does other things to Zombie sprites
 */
 void zombie_update() {
+	zombie_spawn();
 	for (int i = 0; i < NUM_ZOMBIES; i++) {
 		zombie_t *z = &zombie_array[i];
 		if (!z->sprite->is_visible) return;
@@ -968,8 +974,21 @@ void zombie_update() {
 }
 
 /*
+zombie_spawn
+	Spawns Zombies at top of screen
+*/
+void zombie_spawn() {
+	if (time_elapsed() - zombie_reset_time < 3 || zombie_count() > 0) return;
+	for (int i = 0; i < NUM_ZOMBIES; i++) {
+		zombie_t *z = &zombie_array[i];
+		sprite_move_to(z->sprite, zombie_start_pos[i], 1);
+		z->sprite->is_visible = true;
+	}
+}
+
+/*
 zombie_physics
-	Applies gravity to zombies
+	Applies gravity to Zombies
 */
 void zombie_physics(zombie_t z) {
 	double dx = sprite_dx(z.sprite);
@@ -980,6 +999,20 @@ void zombie_physics(zombie_t z) {
 		dy += ACCEL_GRAV;
 	}
 	sprite_turn_to(z.sprite, dx, dy);
+}
+
+/*
+food_inventory
+	Count of number of Zombies on screen
+*/
+int zombie_count() {
+	int count = 0;
+	for (int i = 0; i < NUM_FOOD; i++) {
+		if (zombie_array[i].sprite->is_visible) {
+			count++;
+		}
+	}
+	return count;
 }
 
 /* ========================================================================== */
@@ -1108,10 +1141,10 @@ int collision_block(sprite_id s) {
 /* ========================================================================== */
 
 /*
-setup_timers
+timer_setup
 	Sets the required values to set up timers
 */
-void setup_timers() {
+void timer_setup() {
 	// Timer 0 (debouncing)
 	TCCR0A = 0b00000000;
 	TCCR0B = 0b00000100;
