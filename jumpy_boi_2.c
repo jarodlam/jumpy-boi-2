@@ -14,7 +14,6 @@ CAB202 project, Semester 2 2018
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include <util/delay.h>
-#include <cpu_speed.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <math.h>
@@ -22,14 +21,15 @@ CAB202 project, Semester 2 2018
 #include <string.h>
 #include <stdbool.h>
 
-#include <graphics.h>
-#include <lcd.h>
-#include <sprite.h>
-#include <lcd_model.h>
-#include <macros.h>
-#include <usb_serial.h>
-#include <cab202_adc.h>
-#include <ram_utils.h>
+#include "cpu_speed.h"
+#include "graphics.h"
+#include "lcd.h"
+#include "sprite.h"
+#include "lcd_model.h"
+#include "macros.h"
+#include "usb_serial.h"
+#include "cab202_adc.h"
+#include "ram_utils.h"
 
 // Defines
 #define STUDENT_NAME "Jarod Lam"
@@ -197,6 +197,7 @@ int main(void);
 void setup();
 void reset();
 void process();
+void cleanup();
 
 // User interface
 void screen_intro();
@@ -207,8 +208,9 @@ void screen_fade(int dir);
 
 // Player
 void player_setup();
-void reset_player();
+void player_reset();
 void player_update();
+void player_cleanup();
 void player_physics();
 void player_standing();
 void player_block_motion();
@@ -222,19 +224,23 @@ void player_boundaries();
 
 // Blocks
 void block_setup();
-block_t *block_create(int curr_row, int curr_col, bool safe, int num_blocks);
-block_t *block_create_starting();
+block_t *block_create(int curr_row, int curr_col, bool safe, int curr_block,
+                                  unsigned char *s_safe, unsigned char *s_forb);
+block_t *block_create_starting(unsigned char *s_safe);
 bool block_safe(int curr_col, int num_cols, int *safe_count);
 void block_update();
+void block_cleanup();
 
 // Treasure
 void treasure_setup();
 void treasure_update();
 void treasure_collect();
+void treasure_cleanup();
 
 // Food
 void food_setup();
 void food_update();
+void food_cleanup();
 void food_wrap(food_t *f);
 void food_place();
 int food_search();
@@ -243,6 +249,7 @@ int food_inventory();
 // Zombies
 void zombie_setup();
 void zombie_update();
+void zombie_cleanup();
 void zombie_spawn();
 int zombie_count();
 void zombie_physics(zombie_t *z);
@@ -253,8 +260,6 @@ void zombie_wrap(zombie_t *z);
 
 // Collision
 bool collision_box (sprite_id s1, sprite_id s2);
-//bool pixel_level_collision (sprite_id s1, sprite_id s2);
-//int get_coord_list(sprite_id s, int (*sx)[], int (*sy)[], int size);
 int collision_block(sprite_id s);
 int collision_on_block(sprite_id s);
 bool collision_lr(sprite_id s);
@@ -321,6 +326,7 @@ int main(void) {
 			show_screen();
 			_delay_ms(DELAY);
 		}
+		cleanup();
 		screen_game_over(&game_running);
 	}
 	screen_end();
@@ -372,6 +378,18 @@ void process() {
 	block_update();
 	treasure_update();
 	show_screen();
+}
+
+/*
+cleanup
+	Run cleanup functions to clean memory etc.
+*/
+void cleanup() {
+	player_cleanup();
+	block_cleanup();
+	treasure_cleanup();
+	food_cleanup();
+	zombie_cleanup();
 }
 
 /* ========================================================================== */
@@ -491,6 +509,14 @@ void player_setup() {
 	                                       PLAYER_WIDTH, PLAYER_HEIGHT, sprite);
 }
 
+void player_reset() {
+	player.prev_block = 0;
+	player.move_dir = 0;
+	player.resid_speed = 0;
+	sprite_move_to(player.sprite, PLAYER_START_X, PLAYER_START_Y);
+	sprite_turn_to(player.sprite, 0, 0);
+}
+
 /*
 player_update
 	Controls player movement
@@ -503,7 +529,6 @@ void player_update() {
 	player_standing();
 	player_physics();
 	player_block_motion();
-	//player_block_collision();
 	player_block_forbidden();
 	player_block_score();
 	player_jump();
@@ -512,6 +537,15 @@ void player_update() {
 	
 	player.prev_block = player.curr_block;
 	sprite_draw(player.sprite);
+}
+
+/*
+player_cleanup
+	Free player memory
+*/
+void player_cleanup() {
+	free(player.sprite->bitmap);
+	free(player.sprite);
 }
 
 /*
@@ -604,7 +638,7 @@ void player_control() {
 	double dx = sprite_dx(player.sprite);
 	double dy = sprite_dy(player.sprite);
 	if (block_speed >= MOVE_SPEED) {
-		dx = block_speed * 1.1;
+		dx += player.move_dir * block_speed * 1.1;
 	} else {
 		dx += player.move_dir * MOVE_SPEED;
 	}
@@ -632,7 +666,7 @@ void player_die(char *death_reason) {
 		death_reason, player.lives, player.score, time_string);
 	
 	screen_fade(-1);
-	player_setup();
+	player_reset();
 	process();
 	screen_fade(1);
 	backlight_set(DAC_MAX);
@@ -685,8 +719,11 @@ void block_setup() {
 	// Row and column parameters
 	num_rows = floor(screen_height() / ROW_HEIGHT);
 	num_cols = floor(screen_width() / COL_WIDTH);
+	// Load sprites
+	unsigned char *s_safe = load_rom_bitmap(safe_sprite, 4);
+	unsigned char *s_forb = load_rom_bitmap(forbidden_sprite, 4);
 	// Populate block_array, stopping at max block count
-	block_create_starting();
+	block_create_starting(s_safe);
 	num_blocks = 1;
 	while (num_blocks < MAX_BLOCKS) {
 		// Loop over all the rows
@@ -699,7 +736,7 @@ void block_setup() {
 				bool safe = curr_row==0 ? true
 			                   : block_safe(curr_col, num_cols, &safe_count);
 				block_t *created_block = block_create(curr_row, curr_col, 
-				                                      safe, num_blocks);
+				                              safe, num_blocks, s_safe, s_forb);
 				num_blocks++;
 			}
 		}
@@ -711,13 +748,12 @@ void block_setup() {
 block_create_starting
 	Creates the starting block in the first row
 */
-block_t *block_create_starting() {
+block_t *block_create_starting(unsigned char *s_safe) {
 	block_array[0].row = 0;
 	block_array[0].column = 0;
 	block_array[0].safe = true;
-	unsigned char *sprite = load_rom_bitmap(safe_sprite, 4);
 	block_array[0].sprite = sprite_create(0, ROW_HEIGHT-2,
-		                                     BLOCK_WIDTH, BLOCK_HEIGHT, sprite);
+		                                     BLOCK_WIDTH, BLOCK_HEIGHT, s_safe);
 	return &block_array[0];
 }
 
@@ -725,13 +761,12 @@ block_t *block_create_starting() {
 block_create
 	Creates a block in block_array based on parameters
 */
-block_t *block_create(int curr_row, int curr_col, bool safe, int curr_block) {
+block_t *block_create(int curr_row, int curr_col, bool safe, int curr_block,
+                                 unsigned char *s_safe, unsigned char *s_forb) {
 	// Calculate some parameters
 	int x = curr_col * COL_WIDTH;
 	int y = (curr_row+1) * ROW_HEIGHT - 2;
-	unsigned char *sprite = safe
-		          ? load_rom_bitmap(safe_sprite, 4)
-	              : load_rom_bitmap(forbidden_sprite, 4);
+	unsigned char *sprite = safe ? s_safe : s_forb ;
 	// Apply these parameters to the block in block_array
 	block_array[curr_block].row = curr_row;
 	block_array[curr_block].column = curr_col;
@@ -793,6 +828,16 @@ void block_update() {
 	}
 }
 
+/*
+block_cleanup
+	Free player memory
+*/
+void block_cleanup() {
+	for (int i = 1; i < num_blocks; i++) {
+		free(block_array[i].sprite);
+	}
+}
+
 /* ========================================================================== */
 /*  Treasure                                                                  */
 /* ========================================================================== */
@@ -833,6 +878,15 @@ void treasure_update() {
 }
 
 /*
+treasure_cleanup
+	Frees treasure memory etc
+*/
+void treasure_cleanup() {
+	free(treasure.sprite->bitmap);
+	free(treasure.sprite);
+}
+
+/*
 treasure_collect
 	Checks for treasure collision with the player
 */
@@ -840,7 +894,7 @@ void treasure_collect() {
 	if (collision_box(player.sprite, treasure.sprite)){
 		treasure.sprite->is_visible = false;
 		player.lives += 2;
-		player_setup();
+		player_reset();
 		char time_string[10];
 		time_printable(time_string);
 		usb_serial_sendf("Player collided with treasure. score=%d, lives=%d, \
@@ -880,6 +934,16 @@ void food_update() {
 		food_wrap(f);
 		sprite_step(f->sprite);
 		sprite_draw(f->sprite);
+	}
+}
+
+/*
+food_cleanup
+	Frees Food sprite RAM
+*/
+void food_cleanup() {
+	for (int i = 0; i < NUM_FOOD; i++) {
+		free(food_array[i].sprite);
 	}
 }
 
@@ -982,6 +1046,16 @@ void zombie_update() {
 		
 		sprite_step(z->sprite);
 		sprite_draw(z->sprite);
+	}
+}
+
+/*
+zombie_cleanup
+	Frees Food sprite RAM
+*/
+void zombie_cleanup() {
+	for (int i = 0; i < NUM_ZOMBIES; i++) {
+		free(zombie_array[i].sprite);
 	}
 }
 
