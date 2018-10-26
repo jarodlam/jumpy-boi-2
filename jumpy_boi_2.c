@@ -65,6 +65,10 @@ CAB202 project, Semester 2 2018
 #define FOOD_WIDTH 3
 #define FOOD_HEIGHT 3
 
+#define NUM_ZOMBIES 5
+#define ZOMBIE_WIDTH 9
+#define ZOMBIE_HEIGHT 8
+
 #define BIT(x) (1 << (x))
 #define DB_MASK 0b00000111
 #define OVERFLOW_TOP 1023
@@ -110,16 +114,23 @@ typedef struct food_t {
 	int x_offset;      // x offset of food from block
 } food_t;
 
+typedef struct zombie_t {
+	sprite_id sprite;  // The sprite object for the zombie
+	int curr_block;    // Index of block the zombie is on
+} zombie_t;
+
 // Global variables
-player_t player;                  // Player struct
-treasure_t treasure;              // Treasure struct
-block_t block_array[MAX_BLOCKS];  // Block struct array
-food_t food_array[NUM_FOOD];      // Food struct array
+player_t player;                     // Player struct
+treasure_t treasure;                 // Treasure struct
+block_t block_array[MAX_BLOCKS];     // Block struct array
+food_t food_array[NUM_FOOD];         // Food struct array
+zombie_t zombie_array[NUM_ZOMBIES];  // Zombie struct array
 
 int num_rows;
 int num_cols;
 int num_blocks;
 double block_speed;
+uint32_t zombie_reset_time;
 
 volatile uint8_t state_count[7] = {0,0,0,0,0,0,0};
 volatile bool switch_closed[7] = {0,0,0,0,0,0,0};
@@ -184,16 +195,16 @@ void reset();
 void process();
 
 // User interface
-void intro_screen();
-void pause_screen();
-void game_over_screen(bool *game_running);
-void end_screen();
+void screen_intro();
+void screen_pause();
+void screen_game_over(bool *game_running);
+void screen_end();
 void screen_fade(int dir);
 
 // Player
-void setup_player();
+void player_setup();
 void reset_player();
-void update_player();
+void player_update();
 void player_physics();
 void player_standing();
 void player_block_motion();
@@ -206,59 +217,67 @@ void player_jump();
 void player_boundaries();
 
 // Blocks
-void setup_blocks();
-block_t *create_block(int curr_row, int curr_col, bool safe, int num_blocks);
-block_t *create_starting_block();
-bool generate_safe(int curr_col, int num_cols, int *safe_count);
-void update_blocks();
+void block_setup();
+block_t *block_create(int curr_row, int curr_col, bool safe, int num_blocks);
+block_t *block_create_starting();
+bool block_safe(int curr_col, int num_cols, int *safe_count);
+void block_update();
 
 // Treasure
-void setup_treasure();
-void update_treasure();
+void treasure_setup();
+void treasure_update();
 void treasure_collect();
 
 // Food
-void setup_food();
-void update_food();
-void food_block_wrap(food_t *food);
+void food_setup();
+void food_update();
+void food_block_wrap(food_t *f);
 void food_place();
 int food_search();
 int food_inventory();
 
+// Zombies
+void zombie_setup();
+void zombie_update();
+void zombie_physics();
+
 // Collision
-bool bounding_box_collision (sprite_id s1, sprite_id s2);
+bool collision_box (sprite_id s1, sprite_id s2);
 //bool pixel_level_collision (sprite_id s1, sprite_id s2);
 //int get_coord_list(sprite_id s, int (*sx)[], int (*sy)[], int size);
-int check_block_collision(sprite_id s);
-int get_current_block(sprite_id s);
+int collision_block(sprite_id s);
+int collision_on_block(sprite_id s);
 
 // Timers and interrupts
 void setup_timers();
 
-// Input/output
-void setup_io();
-bool read_switch_raw(int switch_id);
-bool read_switch(int switch_id);
-void set_switch(int switch_id);
-void set_led(int led_id, bool state);
+// Switches
+void switch_setup();
+bool switch_read_raw(int switch_id);
+bool switch_read(int switch_id);
+void switch_set(int switch_id);
+
+// LEDs
+void led_setup();
+void led_set(int led_id, bool state);
 
 // Serial
-void setup_usb_serial(void);
-void update_usb_serial();
+void usb_serial_setup(void);
+void usb_serial_update();
 void usb_serial_send(char * message);
 void usb_serial_sendf(const char *format, ...);
 
 // Backlight
-void setup_backlight();
-void set_backlight(int duty_cycle);
+void backlight_setup();
+void backlight_set(int duty_cycle);
 
 // Helper functions
 void draw_centref(int y_offset, const char * format, ...);
 void draw_centref_P(int y_offset, const char * format, ...);
 int screen_width();
 int screen_height();
-double get_elapsed_time();
-char get_printable_time(char *time_string);
+double time_elapsed();
+char time_printable(char *time_string);
 void sprite_turn_to(sprite_id sprite, double dx, double dy);
 void sprite_move_to(sprite_id sprite, int x, int y);
 void sprite_step(sprite_id sprite);
@@ -280,7 +299,7 @@ main (void)
 */
 int main(void) {
 	setup();
-	intro_screen();
+	screen_intro();
 	bool game_running = true;
 	while (game_running) {
 		reset();
@@ -291,9 +310,9 @@ int main(void) {
 			show_screen();
 			_delay_ms(DELAY);
 		}
-		game_over_screen(&game_running);
+		screen_game_over(&game_running);
 	}
-	end_screen();
+	screen_end();
 }
 
 /*
@@ -304,10 +323,11 @@ void setup() {
 	set_clock_speed(CPU_8MHz);
 	lcd_init(LCD_DEFAULT_CONTRAST);
 	adc_init();
-	setup_io();
+	switch_setup();
+	led_setup();
 	setup_timers();
-	setup_backlight();
-	setup_usb_serial();
+	backlight_setup();
+	usb_serial_setup();
 	_delay_ms(500);
 }
 
@@ -315,10 +335,10 @@ void reset() {
 	player.lives = INITIAL_LIVES;
 	player.score = 0;
 	overflow_counter = 0;
-	setup_blocks();
-	setup_player();
-	setup_treasure();
-	setup_food();
+	block_setup();
+	player_setup();
+	treasure_setup();
+	food_setup();
 	clear_screen();
 	show_screen();
 	usb_serial_sendf(F("Game started. player x=%0.1f, player y=%0.1f\n"),
@@ -332,12 +352,12 @@ process (void)
 */
 void process() {
 	clear_screen();
-	pause_screen();
-	update_usb_serial();
-	update_player();
-	update_food();
-	update_blocks();
-	update_treasure();
+	screen_pause();
+	usb_serial_update();
+	player_update();
+	food_update();
+	block_update();
+	treasure_update();
 	show_screen();
 }
 
@@ -346,30 +366,30 @@ void process() {
 /* ========================================================================== */
 
 /*
-intro_screen
+screen_intro
 	Intro screen showing name and student number when the program starts. Exits
 	when SW2 is pressed.
 */
-void intro_screen() {
+void screen_intro() {
 	clear_screen();
 	draw_centref(-16, F(GAME_NAME));
 	draw_centref(-8, F(STUDENT_NAME));
 	draw_centref(0, F(STUDENT_NUMBER));
 	draw_centref(8, F("SW2 TO START"));
 	show_screen();
-	while (!(read_switch(SW2) || usb_serial_getchar() == 's'));
+	while (!(switch_read(SW2) || usb_serial_getchar() == 's'));
 	srand(TCNT3);  // Use the timer to seed the RNG
 }
 
 /*
-pause_screen
+screen_pause
 	Pause screen when the joystick centre is pressed once
 */
-void pause_screen() {
-	if (!read_switch(SWC)) {return;}
+void screen_pause() {
+	if (!switch_read(SWC)) {return;}
 	uint32_t pause_overflow = overflow_counter; // Record pause time
 	char time_string[10];
-	get_printable_time(time_string);
+	time_printable(time_string);
 	
 	clear_screen();
 	draw_centref(-24, "PAUSED");
@@ -381,18 +401,18 @@ void pause_screen() {
 	show_screen();
 	
 	_delay_ms(500);
-	while (!read_switch(SWC));   // Wait for joystick to be pressed
+	while (!switch_read(SWC));   // Wait for joystick to be pressed
 	_delay_ms(200);
 	overflow_counter -= overflow_counter - pause_overflow; // Subtract pause
 }
 
 /*
-game_over_screen
+screen_game_over
 	Game over screen when the player loses all lives
 */
-void game_over_screen(bool *game_running) {
+void screen_game_over(bool *game_running) {
 	char time_string[10];
-	get_printable_time(time_string);
+	time_printable(time_string);
 	clear_screen();
 	draw_centref(-24, F("YOU DIED :("));
 	draw_centref(-16, F("Total score: %d"), player.score);
@@ -401,20 +421,20 @@ void game_over_screen(bool *game_running) {
 	draw_centref(8, F("SW2 to end"));
 	show_screen();
 	while (1) {
-		if (read_switch(SW2)) {
+		if (switch_read(SW2)) {
 			*game_running = false;
 			return;
-		} else if (read_switch(SW3)) {
+		} else if (switch_read(SW3)) {
 			return;
 		}
 	}
 }
 
 /*
-end_screen
+screen_end
 	Just displays the student number on screen.
 */
-void end_screen() {
+void screen_end() {
 	clear_screen();
 	draw_centref(-8, F(STUDENT_NUMBER));
 	show_screen();
@@ -432,7 +452,7 @@ void screen_fade(int dir) {
 	else         {i1 = -15; i2 =  0;}
 	LCD_CMD(lcd_set_function, lcd_instr_extended);
 	for (int i = i1; i <= i2; i++) {
-		set_backlight(backlight_step * i * dir);
+		backlight_set(backlight_step * i * dir);
 		LCD_CMD(lcd_set_contrast, contrast_step * i * dir);
 		_delay_ms(10);
 	}
@@ -444,10 +464,10 @@ void screen_fade(int dir) {
 /* ========================================================================== */
 
 /*
-setup_player (void)
+player_setup (void)
 	Creates the player sprite with initial values
 */
-void setup_player() {
+void player_setup() {
 	// Defaults
 	player.prev_block = 0;
 	player.move_dir = 0;
@@ -459,13 +479,13 @@ void setup_player() {
 }
 
 /*
-update_player
+player_update
 	Controls player movement
 */
-void update_player() {
+void player_update() {
 	sprite_step(player.sprite);
 	player.sprite->dx = player.resid_speed;
-	player.curr_block = get_current_block(player.sprite);
+	player.curr_block = collision_on_block(player.sprite);
 
 	player_standing();
 	player_physics();
@@ -530,7 +550,7 @@ void player_block_collision() {
 	// Exit the function if standing on a block
 	if (player.curr_block >= 0) return;
 	// Check for a collided block
-	int b = check_block_collision(player.sprite);
+	int b = collision_block(player.sprite);
 	usb_serial_sendf(F("Player collided with block %d\n"), b);
 	if (b < 0) return;  // Exit if no collision
 	else if (!block_array[b].safe) player_die("forbidden block");
@@ -579,9 +599,9 @@ void player_control() {
 	sprite_turn_to(player.sprite, dx, dy);
 	// Exit the function if not standing on a block
 	if (player.curr_block < 0) return;
-	if (read_switch(SWL) && player.move_dir > -1) {
+	if (switch_read(SWL) && player.move_dir > -1) {
 		player.move_dir -= 1;
-	} else if (read_switch(SWR) && player.move_dir < 1) {
+	} else if (switch_read(SWR) && player.move_dir < 1) {
 		player.move_dir += 1;
 	}
 }
@@ -596,15 +616,15 @@ void player_die(char *death_reason) {
 	player.lives--;
 	
 	char time_string[10];
-	get_printable_time(time_string);
+	time_printable(time_string);
 	usb_serial_sendf("Player died due to %s, lives=%d, score=%d, time=%s\n",
 		death_reason, player.lives, player.score, time_string);
 	
 	screen_fade(-1);
-	setup_player();
+	player_setup();
 	process();
 	screen_fade(1);
-	set_backlight(DAC_MAX);
+	backlight_set(DAC_MAX);
 }
 
 /*
@@ -615,7 +635,7 @@ void player_jump() {
 	if (player.curr_block < 0) return;  // Exit if not grounded
 	double dx = sprite_dx(player.sprite);
 	double dy = sprite_dy(player.sprite);
-	if (read_switch(SWU)) {
+	if (switch_read(SWU)) {
 		dy = -JUMP_SPEED;
 	}
 	sprite_turn_to(player.sprite, dx, dy);
@@ -643,16 +663,16 @@ void player_boundaries() {
 /* ========================================================================== */
 
 /*
-setup_blocks (void)
+block_setup (void)
 	Sets up blocks randomly with no observable pattern. All blocks are added to
 	the block_t array block_array
 */
-void setup_blocks() {
+void block_setup() {
 	// Row and column parameters
 	num_rows = floor(screen_height() / ROW_HEIGHT);
 	num_cols = floor(screen_width() / COL_WIDTH);
 	// Populate block_array, stopping at max block count
-	create_starting_block();
+	block_create_starting();
 	num_blocks = 1;
 	while (num_blocks < MAX_BLOCKS) {
 		// Loop over all the rows
@@ -663,8 +683,8 @@ void setup_blocks() {
 				// Randomly make this block empty
 				if ((double) rand() / (RAND_MAX) < EMPTY_CHANCE) {continue;}
 				bool safe = curr_row==0 ? true
-			                   : generate_safe(curr_col, num_cols, &safe_count);
-				block_t *created_block = create_block(curr_row, curr_col, 
+			                   : block_safe(curr_col, num_cols, &safe_count);
+				block_t *created_block = block_create(curr_row, curr_col, 
 				                                      safe, num_blocks);
 				num_blocks++;
 			}
@@ -674,10 +694,10 @@ void setup_blocks() {
 }
 
 /*
-create_starting_block
+block_create_starting
 	Creates the starting block in the first row
 */
-block_t *create_starting_block() {
+block_t *block_create_starting() {
 	block_array[0].row = 0;
 	block_array[0].column = 0;
 	block_array[0].safe = true;
@@ -688,10 +708,10 @@ block_t *create_starting_block() {
 }
 
 /*
-create_block
+block_create
 	Creates a block in block_array based on parameters
 */
-block_t *create_block(int curr_row, int curr_col, bool safe, int curr_block) {
+block_t *block_create(int curr_row, int curr_col, bool safe, int curr_block) {
 	// Calculate some parameters
 	int x = curr_col * COL_WIDTH;
 	int y = (curr_row+1) * ROW_HEIGHT - 2;
@@ -708,7 +728,7 @@ block_t *create_block(int curr_row, int curr_col, bool safe, int curr_block) {
 }
 
 /*
-generate_safe
+block_safe
 	Generates a block based on parameters and adds it to block_array
 Parameters:
 	int curr_col      The current column in the block generation algorithm
@@ -717,7 +737,7 @@ Parameters:
 Returns:
 	block_t*
 */
-bool generate_safe(int curr_col, int num_cols, int *safe_count) {
+bool block_safe(int curr_col, int num_cols, int *safe_count) {
 	// Force the block to be safe if there are none in the row
 	bool safe;
 	if (curr_col == num_cols-1 && *safe_count <= 0) {
@@ -734,10 +754,10 @@ bool generate_safe(int curr_col, int num_cols, int *safe_count) {
 }
 
 /*
-update_blocks
+block_update
 	Draws all blocks and updates their positions
 */
-void update_blocks() {
+void block_update() {
 	sprite_draw(block_array[0].sprite);
 	for (int i = 1; i < num_blocks; i++) {
 		sprite_id curr_sprite = block_array[i].sprite;
@@ -764,10 +784,10 @@ void update_blocks() {
 /* ========================================================================== */
 
 /*
-setup_treasure
+treasure_setup
 	Sets up treasure location and velocity
 */
-void setup_treasure() {
+void treasure_setup() {
 	char* sprite = load_rom_bitmap(treasure_sprite, 16);
 	treasure.sprite = sprite_create(1, screen_height()-TREASURE_HEIGHT-3,
 		                               TREASURE_WIDTH, TREASURE_HEIGHT, sprite);
@@ -776,12 +796,12 @@ void setup_treasure() {
 }
 
 /*
-update_treasure
+treasure_update
 	Draws and updates the treasure sprite
 */
-void update_treasure() {
+void treasure_update() {
 	if (!treasure.sprite->is_visible) {return;}
-	if (read_switch(SW3)) {    // Start and stop the treasure sprite
+	if (switch_read(SW3)) {    // Start and stop the treasure sprite
 		treasure.moving = !treasure.moving;
 		_delay_ms(10);
 	}
@@ -803,12 +823,12 @@ treasure_collect
 	Checks for treasure collision with the player
 */
 void treasure_collect() {
-	if (bounding_box_collision(player.sprite, treasure.sprite)){
+	if (collision_box(player.sprite, treasure.sprite)){
 		treasure.sprite->is_visible = false;
 		player.lives += 2;
-		setup_player();
+		player_setup();
 		char time_string[10];
-		get_printable_time(time_string);
+		time_printable(time_string);
 		usb_serial_sendf(F("Player collided with treasure. score=%d, lives=%d, \
 time=%s, player x=%0.1f, player y=%0.1f\n"), player.score, player.lives,
 			time_string, sprite_x(player.sprite), sprite_y(player.sprite));
@@ -820,32 +840,32 @@ time=%s, player x=%0.1f, player y=%0.1f\n"), player.score, player.lives,
 /* ========================================================================== */
 
 /*
-setup_food
+food_setup
 	Set up Food sprites and place them on screen
 */
-void setup_food() {
+void food_setup() {
 	char *sprite = load_rom_bitmap(food_sprite, 3);
 	for (int i = 0; i < NUM_FOOD; i++) {
-		food_t *food = &food_array[i];
-		food->curr_block = -1;
-		food->sprite = sprite_create(1, 1, FOOD_WIDTH, FOOD_HEIGHT, sprite);
-		food->sprite->is_visible = false;
+		food_t *f = &food_array[i];
+		f->curr_block = -1;
+		f->sprite = sprite_create(1, 1, FOOD_WIDTH, FOOD_HEIGHT, sprite);
+		f->sprite->is_visible = false;
 	}
 }
 
 /*
-update_food
+food_update
 	Draws and does other things to Food sprites
 */
-void update_food() {
+void food_update() {
 	food_place();
 	for (int i = 0; i < NUM_FOOD; i++) {
-		food_t *food = &food_array[i];
-		if (!food->sprite->is_visible) return;
-		food->sprite->dx = sprite_dx(block_array[food->curr_block].sprite);
-		food_block_wrap(food);
-		sprite_step(food->sprite);
-		sprite_draw(food->sprite);
+		food_t *f = &food_array[i];
+		if (!f->sprite->is_visible) return;
+		f->sprite->dx = sprite_dx(block_array[f->curr_block].sprite);
+		food_block_wrap(f);
+		sprite_step(f->sprite);
+		sprite_draw(f->sprite);
 	}
 }
 
@@ -853,18 +873,18 @@ void update_food() {
 food_block_wrap
 	Makes Food match motion of the block underneath
 */
-void food_block_wrap(food_t *food) {
-	if (food->curr_block < 0) {
-		food->curr_block = get_current_block(food->sprite);
-		if (food->curr_block < 0) return;
+void food_block_wrap(food_t *f) {
+	if (f->curr_block < 0) {
+		f->curr_block = collision_on_block(f->sprite);
+		if (f->curr_block < 0) return;
 	}
 	
-	int x = round(sprite_x(food->sprite));
-	int y = round(sprite_y(food->sprite));
-	if (x < -BLOCK_WIDTH+food->x_offset) {
-		sprite_move_to(food->sprite, screen_width()+food->x_offset, y);
+	int x = round(sprite_x(f->sprite));
+	int y = round(sprite_y(f->sprite));
+	if (x < -BLOCK_WIDTH+f->x_offset) {
+		sprite_move_to(f->sprite, screen_width()+f->x_offset, y);
 	} else if (x > screen_width()) {
-		sprite_move_to(food->sprite, -BLOCK_WIDTH+food->x_offset, y);
+		sprite_move_to(f->sprite, -BLOCK_WIDTH+f->x_offset, y);
 	}
 }
 
@@ -873,13 +893,13 @@ food_place
 	Places a Food at the player location if SWD and there's any Food left
 */
 void food_place() {
-	if (!read_switch(SWD) || player.curr_block < 0) return;
+	if (!switch_read(SWD) || player.curr_block < 0) return;
 	int i = food_search();
 	if (i < 0) return;
 	int px = round(sprite_x(player.sprite));
 	int py = round(sprite_y(player.sprite));
 	sprite_move_to(food_array[i].sprite, px+3, py+PLAYER_HEIGHT-3);
-	food_array[i].curr_block = get_current_block(food_array[i].sprite);
+	food_array[i].curr_block = collision_on_block(food_array[i].sprite);
 	food_array[i].x_offset = px-block_array[food_array[i].curr_block].sprite->x;
 	food_array[i].sprite->is_visible = true;
 }
@@ -911,13 +931,63 @@ int food_inventory() {
 	return count;
 }
 
+/* ========================================================================== */
+/*  Zombies                                                                   */
+/* ========================================================================== */
+
+/*
+zombie_setup
+	Sets up Zombie sprites in Zombie array
+*/
+void zombie_setup() {
+	zombie_reset_time = time_elapsed();
+	char *sprite = load_rom_bitmap(zombie_sprite, 16);
+	for (int i = 0; i < NUM_FOOD; i++) {
+		zombie_t *z = &zombie_array[i];
+		z->curr_block = -1;
+		z->sprite = sprite_create(1, 1, ZOMBIE_WIDTH, ZOMBIE_HEIGHT, sprite);
+		z->sprite->is_visible = false;
+	}
+}
+
+/*
+zombie_update
+	Draws and does other things to Zombie sprites
+*/
+void zombie_update() {
+	for (int i = 0; i < NUM_ZOMBIES; i++) {
+		zombie_t *z = &zombie_array[i];
+		if (!z->sprite->is_visible) return;
+		
+		z->curr_block = collision_on_block(z->sprite);
+		zombie_physics();
+		
+		sprite_step(z->sprite);
+		sprite_draw(z->sprite);
+	}
+}
+
+/*
+zombie_physics
+	Applies gravity to zombies
+*/
+void zombie_physics(zombie_t z) {
+	double dx = sprite_dx(z.sprite);
+	double dy = sprite_dy(z.sprite);
+	if (z.curr_block >= 0) {
+		dy = 0;
+	} else {
+		dy += ACCEL_GRAV;
+	}
+	sprite_turn_to(z.sprite, dx, dy);
+}
 
 /* ========================================================================== */
 /*  Collision                                                                 */
 /* ========================================================================== */
 
 /*
-bounding_box_collision
+collision_box
 	Checks whether two sprites s1 and s2 collide at bounding box level
 Parameters:
 	sprite_id s1    First sprite to be compared
@@ -925,7 +995,7 @@ Parameters:
 Returns:
 	bool          True if there is a collision
 */
-bool bounding_box_collision (sprite_id s1, sprite_id s2) {
+bool collision_box (sprite_id s1, sprite_id s2) {
 	// Get some parameters
 	int s1w = s1->width; int s1h = s1->height;
 	int s2w = s2->width; int s2h = s2->height;
@@ -995,12 +1065,12 @@ get_coord_list
 }*/
 
 /*
-get_current_block
+collision_on_block
 	Gets the index of the block the sprite is standing on
 Returns:
 	int    Index of current block, or -1 if falling
 */
-int get_current_block(sprite_id s) {
+int collision_on_block(sprite_id s) {
 	int sl = round(sprite_x(s));
 	int sr = sl + sprite_width(s) - 1;
 	int sb = round(sprite_y(s)) + sprite_height(s);
@@ -1017,15 +1087,15 @@ int get_current_block(sprite_id s) {
 }
 
 /*
-check_block_collision
+collision_block
 	Checks collision of the sprite with every block on screen
 Returns:
 	int    Index of collided block, or -1 if none
 */
-int check_block_collision(sprite_id s) {
+int collision_block(sprite_id s) {
 	int collided_ind = -1;
 	for (int i = 0; i <= num_blocks; i++) {
-		if (bounding_box_collision(s, block_array[i].sprite)) {
+		if (collision_box(s, block_array[i].sprite)) {
 			if (!block_array[i].safe) return i; // Prioritise forbidden
 			collided_ind = i;
 		}
@@ -1060,7 +1130,7 @@ Timer 0
 */
 ISR(TIMER0_OVF_vect) {
 	for (int i = 0; i <= 6; i++) {
-		state_count[i] = ((state_count[i]<<1) & DB_MASK) | read_switch_raw(i);
+		state_count[i] = ((state_count[i]<<1) & DB_MASK) | switch_read_raw(i);
 		if (state_count[i] & DB_MASK == DB_MASK) {
 			switch_closed[i] = true;
 		} else if (state_count[i] == 0b00000000){
@@ -1079,14 +1149,14 @@ ISR (TIMER3_OVF_vect) {
 }
 
 /* ========================================================================== */
-/*  Input/output                                                              */
+/*  Switches                                                                  */
 /* ========================================================================== */
 
 /*
-setup_io
-	Sets up input/output for switches and leds
+switch_setup
+	Sets up input/output for switches
 */
-void setup_io() {
+void switch_setup() {
 	CLEAR_BIT(DDRF, 6);  // SW2
 	CLEAR_BIT(DDRF, 5);  // SW3
 	CLEAR_BIT(DDRD, 1);  // SWU
@@ -1094,19 +1164,17 @@ void setup_io() {
 	CLEAR_BIT(DDRB, 7);  // SWD
 	CLEAR_BIT(DDRD, 0);  // SWR
 	CLEAR_BIT(DDRB, 0);  // SWC
-	SET_BIT(DDRB, 2);    // LED0
-	SET_BIT(DDRB, 3);    // LED1
 }
 
 /*
-read_switch_raw
+switch_read_raw
 	Reads the raw value of a switch specified by the enum
 Parameters:
 	int switch_id    Switch number/enum from 0-6
 Returns:
 	bool             Switch state true/false
 */
-bool read_switch_raw(int switch_id) {
+bool switch_read_raw(int switch_id) {
 	switch (switch_id) {
 		case 0: return BIT_IS_SET(PINF, 6);  // SW2
 		case 1: return BIT_IS_SET(PINF, 5);  // SW3
@@ -1120,10 +1188,10 @@ bool read_switch_raw(int switch_id) {
 }
 
 /*
-read_switch
+switch_read
 	Reads the value of a switch from the debounced value in switch_closed[]
 */
-bool read_switch(int switch_id) {
+bool switch_read(int switch_id) {
 	if (switch_id > 6 || switch_id < 0) {
 		return false;
 	} else {
@@ -1137,10 +1205,10 @@ bool read_switch(int switch_id) {
 }
 
 /*
-set_switch
+switch_set
 	Artificially sets the value of a switch
 */
-void set_switch(int switch_id) {
+void switch_set(int switch_id) {
 	if (switch_id > 6 || switch_id < 0) {
 		return;
 	} else {
@@ -1149,14 +1217,27 @@ void set_switch(int switch_id) {
 	}
 }
 
+/* ========================================================================== */
+/*  LEDs                                                                      */
+/* ========================================================================== */
+
 /*
-set_led
+led_setup
+	Sets up LED pins
+*/
+void led_setup() {
+	SET_BIT(DDRB, 2);    // LED0
+	SET_BIT(DDRB, 3);    // LED1
+}
+
+/*
+led_set
 	Set an LED to on or off
 Parameters:
 	int led_id    LED number 0 or 1
 	bool state    Turn on or off
 */
-void set_led(int led_id, bool state) {
+void led_set(int led_id, bool state) {
 	switch (led_id) {
 		case 0:  // LED0
 			if (state) {SET_BIT(PORTB, 2);}
@@ -1172,10 +1253,10 @@ void set_led(int led_id, bool state) {
 /* ========================================================================== */
 
 /*
-setup_usb_serial
+usb_serial_setup
 	From Topic 10 lecture.
 */
-void setup_usb_serial(void) {
+void usb_serial_setup(void) {
 	// Set up LCD and display message
 	lcd_init(LCD_DEFAULT_CONTRAST);
 	draw_string(10, 10, "Connect USB...", FG_COLOUR);
@@ -1193,19 +1274,19 @@ void setup_usb_serial(void) {
 }
 
 /*
-update_usb_serial
+usb_serial_update
 	Checks for serial input and maps characters to buttons
 */
-void update_usb_serial() {
+void usb_serial_update() {
 	int16_t char_code = usb_serial_getchar();
 	if (char_code <= 0) return;
 	switch (char_code) {
-		case 'a': set_switch(SWL);
-		case 'd': set_switch(SWR);
-		case 'w': set_switch(SWU);
-		case 't': set_switch(SW3);
-		case 's': set_switch(SWD);
-		case 'p': set_switch(SWC);
+		case 'a': switch_set(SWL);
+		case 'd': switch_set(SWR);
+		case 'w': switch_set(SWU);
+		case 't': switch_set(SW3);
+		case 's': switch_set(SWD);
+		case 'p': switch_set(SWC);
 	}
 }
 
@@ -1239,7 +1320,7 @@ void usb_serial_sendf(const char *format, ...) {
 setup_pwm
 	Initialise PWM for LCD backlight, adapted from Topic 11 example code
 */
-void setup_backlight() {
+void backlight_setup() {
 	// Set to OVERFLOW_TOP ticks per overflow
 	TC4H = OVERFLOW_TOP >> 8;
 	OCR4C = OVERFLOW_TOP & 0xff;
@@ -1251,14 +1332,14 @@ void setup_backlight() {
 	// Select fast PWM
 	TCCR4D = 0;
 	// Turn on the backlight
-	set_backlight(DAC_MAX);
+	backlight_set(DAC_MAX);
 }
 
 /*
-set_backlight
+backlight_set
 	Set PWM for LCD backlight, adapted from Topic 11 example code
 */
-void set_backlight(int duty_cycle) {
+void backlight_set(int duty_cycle) {
 	// Set bits 8 and 9 of Output Compare Register 4A.
 	TC4H = duty_cycle >> 8;
 	// Set bits 0..7 of Output Compare Register 4A.
@@ -1308,23 +1389,23 @@ int screen_height() {
 }
 
 /*
-get_elapsed_time()
+time_elapsed()
 	Get the current game time from timer 3
 Returns:
 	double    Game time in seconds
 */
-double get_elapsed_time() {
+double time_elapsed() {
 	return ( overflow_counter * 65536.0 + TCNT3 ) * 64  / 8000000;
 }
 
 /*
-get_printable_time()
+time_printable()
 	Get the current game time in mm:ss format
 Returns:
 	char    Game time in mm:ss format
 */
-char get_printable_time(char *time_string) {
-	double curr_time = get_elapsed_time();
+char time_printable(char *time_string) {
+	double curr_time = time_elapsed();
 	int minutes = curr_time / 60;
 	int seconds = (int) curr_time % 60;
 	snprintf(time_string, 10, "%02d:%02d", minutes, seconds);
