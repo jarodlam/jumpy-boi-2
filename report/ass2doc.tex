@@ -52,23 +52,23 @@
 5 & Random blocks & Fully implemented \\ \midrule
 6 & Player movement & Fully implemented \\ \midrule
 7 & Treasure & Fully implemented \\ \midrule
-8 & Basic game mechanics & Partially implemented \\ \midrule
+8 & Basic game mechanics & Fully implemented \\ \midrule
 9 & Block movement & Fully implemented \\ \midrule
-10 & Player velocity & Fully implemented \\ \midrule
+10 & Player velocity & Partially implemented \\ \midrule
 11 & Player jumping & Fully implemented \\ \midrule
 12 & Player inventory & Fully implemented \\ \midrule
 13 & Zombies & Partially implemented \\ \midrule
 14 & Pause screen advanced & Fully implemented \\ \midrule
 15 & ADC for block speed & Fully implemented \\ \midrule
 16 & Switch debouncing & Fully implemented \\ \midrule
-17 & LED warning & Not implemented \\ \midrule
-18 & Direct control of LCD & Not implemented \\ \midrule
-19 & Multiple timers & Partially implemented \\ \midrule
-20 & Program (flash) memory & Partially implemented \\ \midrule
+17 & LED warning & Fully implemented \\ \midrule
+18 & Direct control of LCD & Fully implemented \\ \midrule
+19 & Multiple timers & Fully implemented \\ \midrule
+20 & Program (flash) memory & Fully implemented \\ \midrule
 21 & PWM controlled visual effects & Fully implemented \\ \midrule
 22 & Pixel level collision & Not implemented \\ \midrule
-23 & Serial communication events & Partially implemented \\ \midrule
-24 & Serial communication game control & Partially implemented \\
+23 & Serial communication events & Fully implemented \\ \midrule
+24 & Serial communication game control & Fully implemented \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -125,7 +125,7 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \test{The player dies if any part of the player sprite moves off the screen in any direction or manner.}{Guide the player off the sides or bottom of the screen.}{The player dies when it hits the edges of the screen.}{As expected.}
 \test{On death, the player respawns on the `starting block'}{Kill the player using any method imaginable while having 2 lives or more.}{The player dies and respawns on the stationary `starting block'.}{As expected.}
 \test{When the player loses all their lives, the game over screen is displayed which displays a game over message, total score, and game play time.}{Kill the player repeatedly by any means until all lives are gone.}{The game over screen is displayed showing a message, total score, and game play time in mm:ss format.}{As expected.}
-\test{The game over screen allows the player to restart by pressing SW3 and score, lives, time, and player position all reset.}{Press SW3 on the game over screen.}{The game screen disappears and score, lives, time, and player position all reset, and the game restarts.}{Partially implemented.}
+\test{The game over screen allows the player to restart by pressing SW3 and score, lives, time, and player position all reset.}{Press SW3 on the game over screen.}{The game screen disappears and score, lives, time, and player position all reset, and the game restarts.}{As expected.}
 \test{The game over screen allows the player to end the game by pressing SW2 which clears everything and just displays student number on the screen.}{Press SW2 on the game over screen.}{The screen is cleared and the student number is displayed on the screen.}{As expected.}
 \end{testplan}
 
@@ -146,7 +146,7 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \test{If the player is not supported by a block, then it will commence to accelerate downwards.}{Guide the player off a safe block until it is not supported by any block.}{The player will start to accelerate downwards.}{As expected.}
 \test{If the player is moving horizontally before leaving the support of a block, then the player must continue to move horizontally at the same speed while accelerating downwards, so that a parabolic flight path will be observed.}{Move the player off a moving safe block.}{The player will keep its horizontal velocity but accelerate downwards according to gravity.}{As expected.}
 \test{If the player is moving without support of a block and the player lands on a safe block, it will then immediately begin to move horizontally in the same speed and direction as the block, and all vertical motion will cease.}{Move the player off a moving safe block so that it falls and lands on another moving safe block.}{When the player lands, it will immediately begin to move horizontally in the same speed and direction as the block, and all vertical motion will cease.}{As expected.}
-\test{If the player is moving without support of a block, and its Sprite collides with the end of a safe block (from the side), then its horizontal motion becomes zero, and it continues to accelerate downward.}{Make the player jump off a block and collide with the end of another safe block from the side.}{The player's horizontal motion becomes zero and it continues to accelerate downward.}{As expected.}
+%\test{If the player is moving without support of a block, and its Sprite collides with the end of a safe block (from the side), then its horizontal motion becomes zero, and it continues to accelerate downward.}{Make the player jump off a block and collide with the end of another safe block from the side.}{The player's horizontal motion becomes zero and it continues to accelerate downward.}{As expected.}
 \test{All other collisions between the player and safe blocks are treated in a manner consistent with the combined motion.}{From a lower row of blocks, make the player jump into a safe block on the row above.}{The player is given an upward velocity passes upward through the block above, keeping the horizontal velocity of its previous block and accelerating vertically downwards.}{As expected.}
 \test{Any collision with an unsafe block results in death.}{Guide the player into an unsafe block by standing or jumping into it.}{The player dies and a life is deducted.}{As expected.}
 \end{testplan}
@@ -174,11 +174,11 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \begin{testplan}{Zombies}
 \test{Five (5) Zombies appear from the top of the screen, and fall straight down without overlapping each other, after the program has been running for approximately 3 seconds.}{Start the game and wait approximately 3 seconds.}{Five Zombies appear from the top of the screen and fall straight down without overlapping each other.}{As expected.}
 \test{Zombies stop falling when they land on any block.}{Start the game and observe the Zombie motion.}{The Zombies stop falling when they land on a block.}{As expected.}
-\test{If a Zombie falls all the way to the bottom of the screen, it passes from view and does not reappear immediately. The player doesn't get any points for this.}{Start the game and wait for a Zombie to fall off the bottom of the screen. Check the score on the pause screen.}{When the Zombie falls off the bottom of the screen, it passes from view and does not reappear immediately. The player's score does not change.}{Not implemented.}
+\test{If a Zombie falls all the way to the bottom of the screen, it passes from view and does not reappear immediately. The player doesn't get any points for this.}{Start the game and wait for a Zombie to fall off the bottom of the screen. Check the score on the pause screen.}{When the Zombie falls off the bottom of the screen, it passes from view and does not reappear immediately. The player's score does not change.}{As expected.}
 \test{After landing on a block, Zombies prowl left and right along the blocks at fixed constant speed relative to the blocks.}{Start the game and observe the Zombie motion.}{Zombies will move faster when moving with the direction of the blocks, and slower when moving against the direction of the blocks.}{Not implemented.}
 \test{Zombies can cross over narrow gaps, and whenever a Zombie reaches a gap that it cannot cross, it reverses and moves in the opposite direction.}{Start the game and observe the Zombie motion.}{Zombies move between blocks with narrow gaps, and reverses and moves in the opposite direction when it encounters a wider gap.}{Not implemented.}
-\test{Zombies may overlap each other if they are moving in opposite directions on the same span of blocks.}{Start the game and observe the Zombie motion.}{If two zombies are moving in opposite directions on the same span of blocks, they overlap and pass through each other.}{Not implemented.}
-\test{If a Zombie is on a block that leaves the screen, the Zombie is carried off the screen; it continues to move along the blocks as if nothing untoward had occurred.}{Start the game and observe the Zombie motion.}{Zombies that are on a block that move off-screen are teleported to the other side of the screen where the block reappears.}{Not implemented.}
+\test{Zombies may overlap each other if they are moving in opposite directions on the same span of blocks.}{Start the game and observe the Zombie motion.}{If two zombies are moving in opposite directions on the same span of blocks, they overlap and pass through each other.}{As expected.}
+\test{If a Zombie is on a block that leaves the screen, the Zombie is carried off the screen; it continues to move along the blocks as if nothing untoward had occurred.}{Start the game and observe the Zombie motion.}{Zombies that are on a block that move off-screen are teleported to the other side of the screen where the block reappears.}{As expected.}
 \test{When a Zombie collides with Food, the Zombie disappears, the player gains 10 points, the Food disappears, and the Food inventory increases by 1.}{Place Food in the path of a Zombie and wait for them to collide. Check the score and inventory on the pause screen.}{When the Zombie collides with food, it disappears, the player gains 10 points, the Food disappears, and the Food inventory increases by 1.}{Not implemented.}
 \test{If a Zombie collides simultaneously with multiple Food, then the Zombie consumes one Food, leaving the others unaffected.}{Place two Food on the same block in the path of a Zombie, and wait for the Zombie to collide with it.}{The Zombie and one Food disappears, leaving the other Food still on the block.}{Not implemented.}
 \test{Zombies do not disappear when the player collides with them, but instead the player loses a life and respawns.}{Guide the player to collide with a Zombie.}{The Zombie is unaffected, the player loses a life and respawns.}{Not implemented.}
@@ -199,18 +199,18 @@ Advanced functionality implemented, see ``\textit{Player velocity}''.
 \end{testplan}
 
 \begin{testplan}{LED warning}
-\test{Both LED0 and LED1 flash at approximately 4Hz (synchronously or asynchronously) before the zombies spawn.}{Start the game and observe the LEDs for the first approximately 3 seconds.}{Both LED0 and LED1 flash at approximately 4Hz synchronously before the zombies spawn.}{Not implemented.}
-\test{Both LED0 and LED1 flash at approximately 4Hz (synchronously or asynchronously) continue to flash until all the zombies have landed or fallen off screen.}{Start the game and observe the LEDs while the zombies spawn.}{Both LED0 and LED1 flash at approximately 4Hz synchronously until all the zombies have landed or fallen off screen.}{Not implemented.}
+\test{Both LED0 and LED1 flash at approximately 4Hz (synchronously or asynchronously) before the zombies spawn.}{Start the game and observe the LEDs for the first approximately 3 seconds.}{Both LED0 and LED1 flash at approximately 4Hz synchronously before the zombies spawn.}{As expected.}
+\test{Both LED0 and LED1 flash at approximately 4Hz (synchronously or asynchronously) continue to flash until all the zombies have landed or fallen off screen.}{Start the game and observe the LEDs while the zombies spawn.}{Both LED0 and LED1 flash at approximately 4Hz synchronously until all the zombies have landed or fallen off screen.}{As expected.}
 \end{testplan}
 
 \begin{testplan}{PWM controlled visual effects}
-\test{When the player dies with more than one life remaining, the backlight fades off and the screen fades out so nothing is visible.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The backlight gradually fades out via PWM to zero brightness and the screen contrast decreases to zero.}{Fully implemented.}
-\test{After the screen fades out, the screen gradually goes back to normal contrast, the backlight fades on and the player respawns at the top row of blocks.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The screen fades out, then the backlight gradually turns on via PWM and the screen contrast gradually increases to normal levels.}{Fully implemented.}
+\test{When the player dies with more than one life remaining, the backlight fades off and the screen fades out so nothing is visible.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The backlight gradually fades out via PWM to zero brightness and the screen contrast decreases to zero.}{As expected.}
+\test{After the screen fades out, the screen gradually goes back to normal contrast, the backlight fades on and the player respawns at the top row of blocks.}{Start the game and kill the player by pressing joystick left or right to collide with a forbidden block.}{The screen fades out, then the backlight gradually turns on via PWM and the screen contrast gradually increases to normal levels.}{As expected.}
 \end{testplan}
 
-\begin{testplan}{Pixel level collision}
-
-\end{testplan}
+%\begin{testplan}{Pixel level collision}
+%
+%\end{testplan}
 
 \begin{testplan}{Serial communication events}
 \test{When the game starts, the name of event, player x position, and player y position are sent over USB serial.}{Start the game by pressing SW2 while viewing the Teensy serial output from the computer.}{A serial message saying that the game has started, player x position, and player y position are received over USB serial.}{As expected.}

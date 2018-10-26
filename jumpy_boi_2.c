@@ -135,10 +135,12 @@ int num_blocks;
 double block_speed;
 uint32_t zombie_reset_time;
 int zombie_start_pos[] = {18,28,38,48,58};
+uint8_t zombie_direct[9];
 
 volatile uint8_t state_count[7] = {0,0,0,0,0,0,0};
 volatile bool switch_closed[7] = {0,0,0,0,0,0,0};
-volatile uint32_t overflow_counter = 0;  // For tracking time
+volatile uint32_t timer1_overflow = 0;  // For LED flasing
+volatile uint32_t timer3_overflow = 0;  // For tracking time
 
 /* ========================================================================== */
 /*  Sprites                                                                   */
@@ -252,17 +254,21 @@ void zombie_update();
 void zombie_cleanup();
 void zombie_spawn();
 int zombie_count();
+int zombie_flying_count();
 void zombie_physics(zombie_t *z);
 void zombie_block_update(zombie_t *z);
 void zombie_bottom(zombie_t *b);
 void zombie_block_motion(zombie_t *z);
 void zombie_wrap(zombie_t *z);
+void zombie_motion(zombie_t *z);
+void zombie_food(zombie_t *z);
 
 // Collision
 bool collision_box (sprite_id s1, sprite_id s2);
 int collision_block(sprite_id s);
 int collision_on_block(sprite_id s);
 bool collision_lr(sprite_id s);
+int collision_food(sprite_id s);
 
 // Timers and interrupts
 void timer_setup();
@@ -275,7 +281,9 @@ void switch_set(int switch_id);
 
 // LEDs
 void led_setup();
-void led_set(int led_id, bool state);
+void led_set(bool state);
+void led_update();
+void led_flash();
 
 // Serial
 void usb_serial_setup(void);
@@ -286,6 +294,12 @@ void usb_serial_sendf(const char *format, ...);
 // Backlight
 void backlight_setup();
 void backlight_set(int duty_cycle);
+
+// Direct LCD
+void direct_setup();
+void direct_animation();
+void direct_draw_zombie(int x, int y);
+void direct_clear_zombie(int x, int y);
 
 // Helper functions
 void draw_centref(int y_offset, const char * format, ...);
@@ -344,6 +358,7 @@ void setup() {
 	led_setup();
 	timer_setup();
 	backlight_setup();
+	direct_setup();
 	usb_serial_setup();
 	_delay_ms(500);
 }
@@ -351,7 +366,7 @@ void setup() {
 void reset() {
 	player.lives = INITIAL_LIVES;
 	player.score = 0;
-	overflow_counter = 0;
+	timer3_overflow = 0;
 	block_setup();
 	player_setup();
 	treasure_setup();
@@ -377,6 +392,7 @@ void process() {
 	zombie_update();
 	block_update();
 	treasure_update();
+	led_update();
 	show_screen();
 }
 
@@ -418,7 +434,7 @@ screen_pause
 */
 void screen_pause() {
 	if (!switch_read(SWC)) {return;}
-	uint32_t pause_overflow = overflow_counter; // Record pause time
+	uint32_t pause_overflow = timer3_overflow; // Record pause time
 	char time_string[10];
 	time_printable(time_string);
 	
@@ -434,7 +450,7 @@ void screen_pause() {
 	_delay_ms(500);
 	while (!switch_read(SWC));   // Wait for joystick to be pressed
 	_delay_ms(200);
-	overflow_counter -= overflow_counter - pause_overflow; // Subtract pause
+	timer3_overflow -= timer3_overflow - pause_overflow; // Subtract pause
 }
 
 /*
@@ -442,14 +458,15 @@ screen_game_over
 	Game over screen when the player loses all lives
 */
 void screen_game_over(bool *game_running) {
+	direct_animation();
 	char time_string[10];
 	time_printable(time_string);
 	clear_screen();
-	draw_centref(-24, "YOU DIED :(");
-	draw_centref(-16, "Total score: %d", player.score);
-	draw_centref(-8, "Play time: %s", time_string);
-	draw_centref(0, "SW3 to reset");
-	draw_centref(8, "SW2 to end");
+	draw_centref(-20, "YOU DIED :(");
+	draw_centref(-12, "Total score: %d", player.score);
+	draw_centref(-4, "Play time: %s", time_string);
+	draw_centref(4, "SW3 to reset");
+	draw_centref(12, "SW2 to end");
 	show_screen();
 	while (1) {
 		if (switch_read(SW2) || usb_serial_getchar() == 'q') {
@@ -499,16 +516,16 @@ player_setup (void)
 	Creates the player sprite with initial values
 */
 void player_setup() {
-	// Defaults
-	player.prev_block = 0;
-	player.move_dir = 0;
-	player.resid_speed = 0;
-	// Create the player sprite
 	unsigned char *sprite = load_rom_bitmap(player_sprite, 16);
 	player.sprite = sprite_create(PLAYER_START_X, PLAYER_START_Y,
 	                                       PLAYER_WIDTH, PLAYER_HEIGHT, sprite);
+	player_reset();
 }
 
+/*
+player_reset
+	Resets the player values after dying
+*/
 void player_reset() {
 	player.prev_block = 0;
 	player.move_dir = 0;
@@ -660,6 +677,8 @@ Parameters:
 */
 void player_die(char *death_reason) {
 	player.lives--;
+	if (player.lives <= 0) return;
+	
 	char time_string[10];
 	time_printable(time_string);
 	usb_serial_sendf("Player died due to %s. lives=%d, score=%d, time=%s\n",
@@ -1043,6 +1062,8 @@ void zombie_update() {
 		zombie_bottom(z);
 		zombie_block_motion(z);
 		zombie_wrap(z);
+		zombie_motion(z);
+		zombie_food(z);
 		
 		sprite_step(z->sprite);
 		sprite_draw(z->sprite);
@@ -1109,6 +1130,21 @@ int zombie_count() {
 }
 
 /*
+zombie_flying_count
+	Count of number of Zombies on screen
+*/
+int zombie_flying_count() {
+	int count = 0;
+	for (int i = 0; i < NUM_FOOD; i++) {
+		zombie_t *z = &zombie_array[i];
+		if (z->sprite->is_visible && z->curr_block < 0) {
+			count++;
+		}
+	}
+	return count;
+}
+
+/*
 zombie_block_update
 	Updates the current block the zombie is on
 */
@@ -1168,8 +1204,23 @@ void zombie_wrap(zombie_t *z) {
 
 /*
 zombie_food
-	
+	Makes Zombies disappear when they collide with food
 */
+void zombie_food(zombie_t *z) {
+	int c = collision_food(z->sprite);
+	if (c >= 0) {
+		player.score += 10;
+		food_array[c].sprite->is_visible = false;
+	}
+}
+
+/*
+zombie_motion
+	Zombies move on blocks
+*/
+void zombie_motion(zombie_t *z) {
+	z->sprite->dx += z->move_dir * ZOMBIE_SPEED;
+}
 
 /* ========================================================================== */
 /*  Collision                                                                 */
@@ -1252,6 +1303,15 @@ bool collision_lr(sprite_id s) {
 	}
 }
 
+int collision_food(sprite_id s) {
+	for (int i = 0; i < NUM_FOOD; i++) {
+		if (collision_box(s, food_array[i].sprite)) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 /* ========================================================================== */
 /*  Timers and interrupts                                                     */
 /* ========================================================================== */
@@ -1265,6 +1325,10 @@ void timer_setup() {
 	TCCR0A = 0b00000000;
 	TCCR0B = 0b00000100;
 	TIMSK0 = 0b00000001;
+	// Timer 1 (LED flashing)
+	TCCR1A = 0b00000000;
+	TCCR1B = 0b00000010;
+	TIMSK1 = 0b00000001;
 	// Timer 3 (game time)
 	TCCR3A = 0b00000000;
 	TCCR3B = 0b00000011;
@@ -1290,11 +1354,19 @@ ISR(TIMER0_OVF_vect) {
 }
 
 /*
+Timer 1
+	Timer for LED flashing
+*/
+ISR(TIMER1_OVF_vect) {
+    timer1_overflow++;
+}
+
+/*
 Timer 3
 	Timer for game time, gets reset at start of game
 */
 ISR (TIMER3_OVF_vect) {
-	overflow_counter++;
+	timer3_overflow++;
 }
 
 /* ========================================================================== */
@@ -1381,20 +1453,43 @@ void led_setup() {
 
 /*
 led_set
-	Set an LED to on or off
+	Set the LEDs to on or off
 Parameters:
-	int led_id    LED number 0 or 1
 	bool state    Turn on or off
 */
-void led_set(int led_id, bool state) {
-	switch (led_id) {
-		case 0:  // LED0
-			if (state) {SET_BIT(PORTB, 2);}
-			else       {CLEAR_BIT(PORTB, 2);}
-		case 1:  // LED1
-			if (state) {SET_BIT(PORTB, 3);}
-			else       {CLEAR_BIT(PORTB, 3);}
+void led_set(bool state) {
+	if (state) {
+		SET_BIT(PORTB, 2);
+		SET_BIT(PORTB, 3);
+	} else {
+		CLEAR_BIT(PORTB, 2);
+		CLEAR_BIT(PORTB, 3);
 	}
+}
+
+/*
+led_update
+	Flashes the LEDs if they need to be flashing
+*/
+void led_update() {
+	if (zombie_flying_count() > 0 || (time_elapsed()-zombie_reset_time) <= 3) {
+		led_flash();
+	} else {
+		led_set(0);
+	}
+}
+
+/*
+led_flash
+	Controls flashing of LEDs
+*/
+void led_flash() {
+    if (timer1_overflow / 2 % 2) {
+        led_set(1);
+        timer1_overflow = 0;
+    } else {
+        led_set(0);
+    }
 }
 
 /* ========================================================================== */
@@ -1496,6 +1591,75 @@ void backlight_set(int duty_cycle) {
 }
 
 /* ========================================================================== */
+/*  Direct LCD                                                                */
+/* ========================================================================== */
+
+/*
+direct_setup
+	Initialise zombie array for direct LCD, adapted from Topic 8 example
+*/
+void direct_setup() {
+	unsigned char *sprite = load_rom_bitmap(zombie_sprite, 16);
+	// First 8 columns
+    for (int i = 0; i < 8; i++) {          // columns
+        for (int j = 0; j < 16; j += 2) {  // rows
+            uint8_t bit_val = BIT_VALUE(sprite[j], (7 - i));
+            WRITE_BIT(zombie_direct[i], j/2, bit_val);
+        }
+    }
+	// Last column (in the second byte)
+    for (int j = 1; j < 16; j += 2) {  // rows
+        uint8_t bit_val = BIT_VALUE(sprite[j], 7);
+        WRITE_BIT(zombie_direct[8], (j-1)/2, bit_val);
+    }
+	free(sprite);
+}
+
+/*
+direct_animation
+	Game over animatino using lcd_write
+*/
+void direct_animation() {
+	led_set(0);
+	for (int x = 0; x < screen_width()-9; x++) {
+		for (int y = 0; y < 6; y++) {
+			direct_clear_zombie(x-1, y*8);
+			direct_draw_zombie(x, y*8);
+		}
+		_delay_ms(10);
+	}
+}
+
+/*
+direct_draw_zombie
+	Draws a column of zombies for the animation
+*/
+void direct_draw_zombie(int x, int y) {
+	LCD_CMD(lcd_set_function, lcd_instr_basic | lcd_addr_horizontal);
+	LCD_CMD(lcd_set_x_addr, x);
+	LCD_CMD(lcd_set_y_addr, y / 8);
+
+	for (int i = 0; i < 9; i++) {
+	    LCD_DATA(zombie_direct[i]);
+	}
+}
+
+/*
+direct_clear_zombie
+	Draws a column of zombies for the animation
+*/
+void direct_clear_zombie(int x, int y) {
+	LCD_CMD(lcd_set_function, lcd_instr_basic | lcd_addr_horizontal);
+	LCD_CMD(lcd_set_x_addr, x);
+	LCD_CMD(lcd_set_y_addr, y / 8);
+
+	for (int i = 0; i < 9; i++) {
+	    LCD_DATA(0);
+	}
+}
+
+
+/* ========================================================================== */
 /*  Helper functions                                                          */
 /* ========================================================================== */
 
@@ -1544,7 +1708,7 @@ Returns:
 	double    Game time in seconds
 */
 double time_elapsed() {
-	return ( overflow_counter * 65536.0 + TCNT3 ) * 64  / 8000000;
+	return ( timer3_overflow * 65536.0 + TCNT3 ) * 64  / 8000000;
 }
 
 /*
