@@ -138,7 +138,9 @@ int zombie_start_pos[] = {18,28,38,48,58};
 uint8_t zombie_direct[9];
 
 volatile uint8_t state_count[7] = {0,0,0,0,0,0,0};
-volatile bool switch_closed[7] = {0,0,0,0,0,0,0};
+bool switch_prev[7] = {0,0,0,0,0,0,0};
+volatile bool switch_curr[7] = {0,0,0,0,0,0,0};
+bool switch_closed[7] = {0,0,0,0,0,0,0};
 volatile uint32_t timer1_overflow = 0;  // For LED flasing
 volatile uint32_t timer3_overflow = 0;  // For tracking time
 
@@ -275,6 +277,7 @@ void timer_setup();
 
 // Switches
 void switch_setup();
+void switch_update();
 bool switch_read_raw(int switch_id);
 bool switch_read(int switch_id);
 void switch_set(int switch_id);
@@ -385,6 +388,7 @@ process (void)
 */
 void process() {
 	clear_screen();
+	switch_update();
 	screen_pause();
 	usb_serial_update();
 	player_update();
@@ -424,7 +428,7 @@ void screen_intro() {
 	draw_centref(0, STUDENT_NUMBER);
 	draw_centref(8, "SW2 TO START");
 	show_screen();
-	while (!(switch_read(SW2) || usb_serial_getchar() == 's'));
+	while (!(switch_curr[SW2] || usb_serial_getchar() == 's'));
 	srand(TCNT3);  // Use the timer to seed the RNG
 }
 
@@ -448,7 +452,7 @@ void screen_pause() {
 	show_screen();
 	
 	_delay_ms(500);
-	while (!switch_read(SWC));   // Wait for joystick to be pressed
+	while (!switch_curr[SWC]);   // Wait for joystick to be pressed
 	_delay_ms(200);
 	timer3_overflow -= timer3_overflow - pause_overflow; // Subtract pause
 }
@@ -469,10 +473,11 @@ void screen_game_over(bool *game_running) {
 	draw_centref(12, "SW2 to end");
 	show_screen();
 	while (1) {
-		if (switch_read(SW2) || usb_serial_getchar() == 'q') {
+		switch_update();
+		if (switch_curr[SW2] || usb_serial_getchar() == 'q') {
 			*game_running = false;
 			return;
-		} else if (switch_read(SW3) || usb_serial_getchar() == 'r') {
+		} else if (switch_read_raw(SW3) || usb_serial_getchar() == 'r') {
 			return;
 		}
 	}
@@ -1345,9 +1350,9 @@ ISR(TIMER0_OVF_vect) {
 	for (int i = 0; i <= 6; i++) {
 		state_count[i] = ((state_count[i]<<1) & DB_MASK) | switch_read_raw(i);
 		if (state_count[i] & DB_MASK == DB_MASK) {
-			switch_closed[i] = true;
+			switch_curr[i] = true;
 		} else if (state_count[i] == 0b00000000){
-			switch_closed[i] = false;
+			switch_curr[i] = false;
 		}
 	}
 
@@ -1388,6 +1393,17 @@ void switch_setup() {
 }
 
 /*
+switch_update
+	Actively debounces switches
+*/
+void switch_update() {
+	for (int i = 0; i <= 6; i++) {
+		switch_closed[i] = switch_prev[i]==switch_curr[i] ? 0 : switch_curr[i];
+		switch_prev[i] = switch_curr[i];
+	}
+}
+
+/*
 switch_read_raw
 	Reads the raw value of a switch specified by the enum
 Parameters:
@@ -1416,12 +1432,7 @@ bool switch_read(int switch_id) {
 	if (switch_id > 6 || switch_id < 0) {
 		return false;
 	} else {
-		bool state = switch_closed[switch_id];
-		//usb_serial_sendf("%d %d\n",switch_id, state_count[switch_id]);
-		state_count[switch_id] = 0b00000000;
-		switch_closed[switch_id] = false;
-		//usb_serial_sendf("%d %d\n",switch_id, state_count[switch_id]);
-		return state;
+		return switch_closed[switch_id];
 	}
 }
 
