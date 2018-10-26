@@ -75,7 +75,6 @@ CAB202 project, Semester 2 2018
 #define OVERFLOW_TOP 1023
 #define ADC_MAX 1023
 #define DAC_MAX 1023
-#define F(s) load_rom_string(PSTR(s))
 
 /* ========================================================================== */
 /*  Global variables and types                                                */
@@ -245,8 +244,9 @@ int food_inventory();
 void zombie_setup();
 void zombie_update();
 void zombie_spawn();
-void zombie_physics(zombie_t *z);
 int zombie_count();
+void zombie_physics(zombie_t *z);
+void zombie_block_update(zombie_t *z);
 void zombie_bottom(zombie_t *b);
 void zombie_block_motion(zombie_t *z);
 void zombie_wrap(zombie_t *z);
@@ -257,6 +257,7 @@ bool collision_box (sprite_id s1, sprite_id s2);
 //int get_coord_list(sprite_id s, int (*sx)[], int (*sy)[], int size);
 int collision_block(sprite_id s);
 int collision_on_block(sprite_id s);
+bool collision_lr(sprite_id s);
 
 // Timers and interrupts
 void timer_setup();
@@ -352,7 +353,7 @@ void reset() {
 	zombie_setup();
 	clear_screen();
 	show_screen();
-	usb_serial_sendf(F("Game started. player x=%0.1f, player y=%0.1f\n"),
+	usb_serial_sendf("Game started. player x=%0.1f, player y=%0.1f\n",
 	                          sprite_x(player.sprite), sprite_y(player.sprite));
 }
 
@@ -384,10 +385,10 @@ screen_intro
 */
 void screen_intro() {
 	clear_screen();
-	draw_centref(-16, F(GAME_NAME));
-	draw_centref(-8, F(STUDENT_NAME));
-	draw_centref(0, F(STUDENT_NUMBER));
-	draw_centref(8, F("SW2 TO START"));
+	draw_centref(-16, GAME_NAME);
+	draw_centref(-8, STUDENT_NAME);
+	draw_centref(0, STUDENT_NUMBER);
+	draw_centref(8, "SW2 TO START");
 	show_screen();
 	while (!(switch_read(SW2) || usb_serial_getchar() == 's'));
 	srand(TCNT3);  // Use the timer to seed the RNG
@@ -448,7 +449,7 @@ screen_end
 */
 void screen_end() {
 	clear_screen();
-	draw_centref(-8, F(STUDENT_NUMBER));
+	draw_centref(-8, STUDENT_NUMBER);
 	show_screen();
 }
 
@@ -485,7 +486,7 @@ void player_setup() {
 	player.move_dir = 0;
 	player.resid_speed = 0;
 	// Create the player sprite
-	char *sprite = load_rom_bitmap(player_sprite, 16);
+	unsigned char *sprite = load_rom_bitmap(player_sprite, 16);
 	player.sprite = sprite_create(PLAYER_START_X, PLAYER_START_Y,
 	                                       PLAYER_WIDTH, PLAYER_HEIGHT, sprite);
 }
@@ -603,7 +604,7 @@ void player_control() {
 	double dx = sprite_dx(player.sprite);
 	double dy = sprite_dy(player.sprite);
 	if (block_speed >= MOVE_SPEED) {
-		dx = block_speed * 0.1;
+		dx = block_speed * 1.1;
 	} else {
 		dx += player.move_dir * MOVE_SPEED;
 	}
@@ -714,7 +715,7 @@ block_t *block_create_starting() {
 	block_array[0].row = 0;
 	block_array[0].column = 0;
 	block_array[0].safe = true;
-	char *sprite = load_rom_bitmap(safe_sprite, 4);
+	unsigned char *sprite = load_rom_bitmap(safe_sprite, 4);
 	block_array[0].sprite = sprite_create(0, ROW_HEIGHT-2,
 		                                     BLOCK_WIDTH, BLOCK_HEIGHT, sprite);
 	return &block_array[0];
@@ -728,7 +729,7 @@ block_t *block_create(int curr_row, int curr_col, bool safe, int curr_block) {
 	// Calculate some parameters
 	int x = curr_col * COL_WIDTH;
 	int y = (curr_row+1) * ROW_HEIGHT - 2;
-	uint8_t *sprite = safe
+	unsigned char *sprite = safe
 		          ? load_rom_bitmap(safe_sprite, 4)
 	              : load_rom_bitmap(forbidden_sprite, 4);
 	// Apply these parameters to the block in block_array
@@ -801,7 +802,7 @@ treasure_setup
 	Sets up treasure location and velocity
 */
 void treasure_setup() {
-	char* sprite = load_rom_bitmap(treasure_sprite, 16);
+	unsigned char* sprite = load_rom_bitmap(treasure_sprite, 16);
 	treasure.sprite = sprite_create(1, screen_height()-TREASURE_HEIGHT-3,
 		                               TREASURE_WIDTH, TREASURE_HEIGHT, sprite);
 	sprite_turn_to(treasure.sprite, TREASURE_SPEED, 0);
@@ -842,8 +843,8 @@ void treasure_collect() {
 		player_setup();
 		char time_string[10];
 		time_printable(time_string);
-		usb_serial_sendf(F("Player collided with treasure. score=%d, lives=%d, \
-time=%s, player x=%0.1f, player y=%0.1f\n"), player.score, player.lives,
+		usb_serial_sendf("Player collided with treasure. score=%d, lives=%d, \
+time=%s, player x=%0.1f, player y=%0.1f\n", player.score, player.lives,
 			time_string, sprite_x(player.sprite), sprite_y(player.sprite));
 	}
 }
@@ -857,7 +858,7 @@ food_setup
 	Set up Food sprites and place them on screen
 */
 void food_setup() {
-	char *sprite = load_rom_bitmap(food_sprite, 3);
+	unsigned char *sprite = load_rom_bitmap(food_sprite, 3);
 	for (int i = 0; i < NUM_FOOD; i++) {
 		food_t *f = &food_array[i];
 		f->curr_block = -1;
@@ -954,7 +955,7 @@ zombie_setup
 */
 void zombie_setup() {
 	zombie_reset_time = time_elapsed();
-	char *sprite = load_rom_bitmap(zombie_sprite, 16);
+	unsigned char *sprite = load_rom_bitmap(zombie_sprite, 16);
 	for (int i = 0; i < NUM_FOOD; i++) {
 		zombie_t *z = &zombie_array[i];
 		z->curr_block = -1;
@@ -973,7 +974,7 @@ void zombie_update() {
 		zombie_t *z = &zombie_array[i];
 		if (!z->sprite->is_visible) continue;
 		
-		z->curr_block = collision_on_block(z->sprite);
+		zombie_block_update(z);
 		zombie_physics(z);
 		zombie_bottom(z);
 		zombie_block_motion(z);
@@ -1034,6 +1035,15 @@ int zombie_count() {
 }
 
 /*
+zombie_block_update
+	Updates the current block the zombie is on
+*/
+void zombie_block_update(zombie_t *z) {
+	if (collision_lr(z->sprite)) return;
+	z->curr_block = collision_on_block(z->sprite);
+}
+
+/*
 zombie_bottom
 	Makes zombie disappear if it falls off the screen
 */
@@ -1081,6 +1091,11 @@ void zombie_wrap(zombie_t *z) {
 		sprite_move_to(z->sprite, -BLOCK_WIDTH+z->x_offset, y);
 	}
 }
+
+/*
+zombie_food
+	
+*/
 
 /* ========================================================================== */
 /*  Collision                                                                 */
@@ -1149,6 +1164,18 @@ int collision_block(sprite_id s) {
 		}
 	}
 	return collided_ind;
+}
+
+/*
+collision_lr
+	Checks if a sprite is outside the screen on left and right
+*/
+bool collision_lr(sprite_id s) {
+	if (s->x <= 0 || s->x > screen_width()+s->width) {
+		return true;
+	} else {
+		return false;
+	}
 }
 
 /* ========================================================================== */
